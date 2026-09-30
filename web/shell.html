@@ -6,6 +6,7 @@
 <title>OpenGD</title>
 <style>
   :root { color-scheme: dark; }
+  [hidden] { display: none !important; }  /* display:flex on #setup would otherwise beat the hidden attribute */
   html, body { margin: 0; height: 100%; background: #000; color: #eee; font: 15px/1.4 system-ui, sans-serif; }
   #game { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
   canvas { max-width: 100vw; max-height: 100vh; outline: none; touch-action: none; }
@@ -44,14 +45,22 @@
 <script>
 const $ = id => document.getElementById(id);
 const EXT = /\.(png|plist|fnt|mp3|ogg|wav|ttf|json)$/i;
-let FS;
+let fsx;  // NB: not 'FS' - Emscripten declares a global FS and a clash kills index.js
 
 function setStatus(t) { $('status').textContent = t; }
-function hasAssets() {
-  try { return FS.readdir('/Resources').some(n => /^GJ_LaunchSheet(-hd)?\.plist$/.test(n) || FS.isDir(FS.stat('/Resources/' + n).mode)); }
-  catch (e) { return false; }
+function findFile(dir, re) {
+  let names;
+  try { names = fsx.readdir(dir); } catch (e) { return false; }
+  for (const n of names) {
+    if (n === '.' || n === '..') continue;
+    const p = dir + '/' + n;
+    let st; try { st = fsx.stat(p); } catch (e) { continue; }
+    if (fsx.isDir(st.mode) ? findFile(p, re) : re.test(n)) return true;
+  }
+  return false;
 }
-function sync(populate) { return new Promise(res => FS.syncfs(populate, err => { if (err) console.warn(err); res(); })); }
+function hasAssets() { return findFile('/Resources', /^GJ_LaunchSheet(-hd)?\.plist$/); }
+function sync(populate) { return new Promise(res => fsx.syncfs(populate, err => { if (err) console.warn(err); res(); })); }
 function show() {
   const ok = hasAssets();
   $('pick').hidden = ok; $('ready').hidden = !ok;
@@ -70,8 +79,8 @@ async function importArchive(file) {
     if (a >= 0) rel = rel.slice(a + 7); else if (r >= 0) rel = rel.slice(r + 10);
     if (rel.startsWith('res/') || rel.startsWith('lib/')) continue;
     const path = '/Resources/' + rel;
-    FS.mkdirTree(path.slice(0, path.lastIndexOf('/')));
-    FS.writeFile(path, await f.async('uint8array'));
+    fsx.mkdirTree(path.slice(0, path.lastIndexOf('/')));
+    fsx.writeFile(path, await f.async('uint8array'));
     if (++n % 50 === 0) setStatus('Unpacked ' + n + ' / ' + entries.length + ' files…');
   }
   setStatus('Saving…');
@@ -81,10 +90,10 @@ async function importArchive(file) {
 }
 
 function wipe(dir) {
-  for (const n of FS.readdir(dir)) {
+  for (const n of fsx.readdir(dir)) {
     if (n === '.' || n === '..') continue;
     const p = dir + '/' + n;
-    if (FS.isDir(FS.stat(p).mode)) { wipe(p); FS.rmdir(p); } else FS.unlink(p);
+    if (fsx.isDir(fsx.stat(p).mode)) { wipe(p); fsx.rmdir(p); } else fsx.unlink(p);
   }
 }
 
@@ -94,10 +103,10 @@ var Module = {
   print: t => console.log(t),
   printErr: t => console.warn(t),
   onRuntimeInitialized: async function () {
-    FS = Module.FS;
-    FS.mkdir('/Resources'); FS.mkdir('/save');
-    FS.mount(FS.filesystems.IDBFS, {}, '/Resources');
-    FS.mount(FS.filesystems.IDBFS, {}, '/save');
+    fsx = Module.FS;
+    fsx.mkdir('/Resources'); fsx.mkdir('/save');
+    fsx.mount(fsx.filesystems.IDBFS, {}, '/Resources');
+    fsx.mount(fsx.filesystems.IDBFS, {}, '/save');
     await sync(true);
     show();
   }

@@ -225,16 +225,16 @@ void Engine::fillRect(float x, float y, float w, float h, Color c, Uint8 a) {
 void Engine::drawSprite(const Sprite& s, float cx, float cy, float sx, float sy, float rot, Color col, Uint8 alpha,
                         bool flipX, bool flipY) {
     if (!s.tex) return;
-    // trim offset, scaled and rotated (clockwise rotation, y-up)
-    float ox = s.offX * sx, oy = s.offY * sy;
+    if (sx < 0) { flipX = !flipX; sx = -sx; }
+    if (sy < 0) { flipY = !flipY; sy = -sy; }
+    // trim offset, mirrored when flipped, scaled and rotated (clockwise rotation, y-up)
+    float ox = s.offX * sx * (flipX ? -1.f : 1.f), oy = s.offY * sy * (flipY ? -1.f : 1.f);
     float rad = rot * 3.14159265358979f / 180.f;
     float c = std::cos(rad), sn = std::sin(rad);
     float px = cx + ox * c + oy * sn;
     float py = cy - ox * sn + oy * c;
 
-    float dw = s.w * std::fabs(sx), dh = s.h * std::fabs(sy);
-    if (sx < 0) flipX = !flipX;
-    if (sy < 0) flipY = !flipY;
+    float dw = s.w * sx, dh = s.h * sy;
 
     double angle = rot;
     bool fh = flipX, fv = flipY;

@@ -30,8 +30,8 @@ void drawGround(float scrollX, Color tint) {
     Sprite shadow = E().sprite("groundSquareShadow_001.png");
     if (shadow) {
         const float k = 1.6f;
-        E().drawSprite(shadow, shadow.w * k / 2, top - shadow.h * k / 2, k, k);
-        E().drawSprite(shadow, kW - shadow.w * k / 2, top - shadow.h * k / 2, k, k, 0, {}, 255, true);
+        E().drawSprite(shadow, shadow.srcW * k / 2, top - shadow.srcH * k / 2, k, k);
+        E().drawSprite(shadow, kW - shadow.srcW * k / 2, top - shadow.srcH * k / 2, k, k, 0, {}, 255, true);
     }
 }
 

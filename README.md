@@ -39,6 +39,13 @@ emcmake cmake -S . -B build-web && cmake --build build-web
 python3 -m http.server -d build-web 8000     # open http://localhost:8000
 ```
 
+Browser smoke test (needs your own APK, so it is not run in CI):
+
+```bash
+pip install playwright pillow && playwright install chromium
+python3 tests/web_smoke.py build-web /path/to/Geometry_Dash_1_0.apk
+```
+
 Controls: mouse / touch / <kbd>Space</kbd> / <kbd>↑</kbd> to jump, <kbd>Esc</kbd> to go back.
 
 ## Layout
