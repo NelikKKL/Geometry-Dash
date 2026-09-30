@@ -1,0 +1,21 @@
+# Game assets are copyrighted and must never be committed
+Resources/
+assets/
+*.apk
+
+# Build output
+build/
+build-*/
+out/
+cmake-build-*/
+site/
+
+# Runtime
+save.json
+ogd_test_save.json
+
+# IDE / OS
+.vscode/
+.vs/
+.idea/
+.DS_Store

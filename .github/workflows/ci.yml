@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    name: Native build + tests (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build pkg-config libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  web:
+    name: WebAssembly build (Emscripten)
+    runs-on: ubuntu-latest
+    env:
+      EMSDK_VERSION: 3.1.74
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+          actions-cache-folder: emsdk-cache
+      - name: Cache Emscripten ports
+        uses: actions/cache@v4
+        with:
+          path: ~/.emscripten_cache
+          key: emports-${{ env.EMSDK_VERSION }}
+      - name: Configure
+        run: emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build-web -j
+      - name: Collect site
+        run: |
+          mkdir -p site
+          cp build-web/index.html build-web/index.js build-web/index.wasm site/
+          touch site/.nojekyll
+          ls -lh site
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opengd-web
+          path: site
+      - uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: [native, web]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
