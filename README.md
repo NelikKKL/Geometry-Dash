@@ -14,17 +14,41 @@ Runs natively (Linux/Windows/macOS) and in the browser via Emscripten/WebAssembl
 | Main menu (buttons, bounce animation, scrolling background, running cube, music) | done |
 | Play scene: ground, background, cube jump physics (ported from the original code) | done |
 | Garage, creator, options, stats, achievements | placeholder popups |
-| Level parsing / objects / collisions / death | TODO |
+| Level parser (plain text and base64+gzip/zlib), 7 official levels load with 0 warnings | done |
+| Level playback: object-id -> sprite table, collisions, death | TODO (currently a coloured-box debug view of level 0) |
 | Particles, motion streak, ship mode, sound effects | TODO |
 
 ## Assets
 
 The game looks for files by **basename** anywhere under the resource directory, so both the flat APK layout
-and the old `reallocate.sh` layout work. `-hd` variants are preferred.
+and any sub-folder layout work. `-hd` variants are preferred.
 
-* **Web:** open the page, press *Choose Geometry Dash APK / ZIP*. The archive is unpacked in the browser and
-  cached in IndexedDB; nothing leaves your machine.
-* **Native:** copy the contents of the APK's `assets/` folder into `./Resources/`.
+Pack your APK once into a single `.akrile` bundle (needs Node >= 18, no npm packages):
+
+```bash
+node tools/akrile-tool.mjs pack Geometry_Dash.apk -o Resources.akrile            # everything (~14 MB)
+node tools/akrile-tool.mjs pack Geometry_Dash.apk -o Resources.akrile --lean     # ~2.5 MB: drops SD twins, promo art, level music
+node tools/akrile-tool.mjs list   Resources.akrile
+node tools/akrile-tool.mjs unpack Resources.akrile -o Resources                  # for the native build
+```
+
+The official levels are not files in the APK; they are text strings inside `lib/*/libgame.so`. `pack` extracts
+them as `level_<track>.txt` (add `--no-levels` to skip). Note: audio and PNGs are already compressed, so a
+bundle is a convenience (one file) rather than a size win; `--lean` is what actually shrinks it.
+
+* **Web:** open the page and choose the `.akrile` (an APK/ZIP also works). It is unpacked in the browser and
+  cached in IndexedDB; nothing leaves your machine. If a `Resources.akrile` is served next to `index.html`
+  it is picked up automatically (use this only for private deployments).
+* **Native:** unpack the bundle (or copy the APK's `assets/`) into `./Resources/`.
+
+Bundles contain copyrighted material: `*.akrile`, `*.apk` and `Resources/` are git-ignored. Do not publish them.
+
+## Level data
+
+`src/core/Level.h` parses level text (`header;object;object;...`) and base64(gzip/zlib) strings. Coordinates are
+in GD units (block = 30); on screen: `x_px = 2*x`, `y_px = 206 + 2*y`. Inspect a level with
+`./build/leveldump Resources/level_0.txt` (`--objects` dumps every object). To run the test against real
+levels: `OGD_LEVELS_DIR=Resources ctest --test-dir build --output-on-failure`.
 
 ## Build
 
@@ -51,10 +75,12 @@ Controls: mouse / touch / <kbd>Space</kbd> / <kbd>↑</kbd> to jump, <kbd>Esc</k
 ## Layout
 
 ```
-src/core/     pure C++: plist + sprite-sheet + BMFont parsers, cube physics, save data (unit-tested)
+src/core/     pure C++: plist/sprite-sheet/BMFont/level parsers, inflate+gzip, cube physics, save data (unit-tested)
 src/engine/   SDL2 wrapper: window, renderer, asset index/cache, audio, text, 9-slice
 src/game/     scenes (loading, menu, play), UI button, popup
 web/shell.html  Emscripten page: asset import, IndexedDB persistence, start button
+web/akrile.js   .akrile archive library (WASM core embedded)
+tools/        akrile-tool.mjs (pack/unpack/list assets + extract levels), leveldump.cpp
 tests/        dependency-free unit tests
 ```
 

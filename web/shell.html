@@ -29,10 +29,10 @@
      Game assets are <b>not</b> included.</p>
   <div id="status">Loading engine…</div>
   <div id="pick" hidden>
-    <label class="btn">Choose Geometry Dash APK / ZIP
-      <input id="file" type="file" accept=".apk,.zip">
+    <label class="btn">Choose Resources.akrile / Geometry Dash APK
+      <input id="file" type="file" accept=".akrile,.apk,.zip">
     </label>
-    <small>The file is unpacked in your browser and stored locally (IndexedDB). Nothing is uploaded.</small>
+    <small>Loaded and unpacked in your browser, then stored locally (IndexedDB). Nothing is uploaded.</small>
   </div>
   <div id="ready" hidden>
     <button id="start">Start</button>
@@ -41,10 +41,10 @@
 </div></div>
 <div id="game"><canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="akrile.js"></script>
 <script>
 const $ = id => document.getElementById(id);
-const EXT = /\.(png|plist|fnt|mp3|ogg|wav|ttf|json)$/i;
+const EXT = /\.(png|plist|fnt|mp3|ogg|wav|ttf|json|txt)$/i;
 let fsx;  // NB: not 'FS' - Emscripten declares a global FS and a clash kills index.js
 
 function setStatus(t) { $('status').textContent = t; }
@@ -66,27 +66,73 @@ function show() {
   $('pick').hidden = ok; $('ready').hidden = !ok;
   setStatus(ok ? 'Assets found.' : 'No game assets yet.');
 }
+const tick = () => new Promise(r => setTimeout(r, 0));   // let the UI repaint between files
 
-async function importArchive(file) {
-  setStatus('Reading ' + file.name + '…');
-  const zip = await JSZip.loadAsync(file);
-  const entries = Object.values(zip.files).filter(f => !f.dir && EXT.test(f.name));
+function loadScript(src) {
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('cannot load ' + src)); document.head.appendChild(s); });
+}
+
+// Normalise an archive entry name to a path below /Resources, or null to skip it.
+function targetName(name) {
+  let rel = name.replace(/\\/g, '/');
+  const a = rel.lastIndexOf('assets/'), r = rel.lastIndexOf('Resources/');
+  if (a >= 0) rel = rel.slice(a + 7); else if (r >= 0) rel = rel.slice(r + 10);
+  if (rel.startsWith('res/') || rel.startsWith('lib/') || rel.startsWith('/') || rel.split('/').includes('..')) return null;
+  return EXT.test(rel) ? rel : null;
+}
+
+// entries: [{name, bytes: async () => Uint8Array}]
+async function writeEntries(entries, label) {
   let n = 0;
-  for (const f of entries) {
-    // APK: "assets/<file>" ; already-prepared zips: "Resources/<file>" or plain files
-    let rel = f.name;
-    const a = rel.lastIndexOf('assets/'), r = rel.lastIndexOf('Resources/');
-    if (a >= 0) rel = rel.slice(a + 7); else if (r >= 0) rel = rel.slice(r + 10);
-    if (rel.startsWith('res/') || rel.startsWith('lib/')) continue;
+  for (const e of entries) {
+    const rel = targetName(e.name);
+    if (!rel) continue;
     const path = '/Resources/' + rel;
     fsx.mkdirTree(path.slice(0, path.lastIndexOf('/')));
-    fsx.writeFile(path, await f.async('uint8array'));
-    if (++n % 50 === 0) setStatus('Unpacked ' + n + ' / ' + entries.length + ' files…');
+    fsx.writeFile(path, await e.bytes());
+    if (++n % 10 === 0) { setStatus(label + ': ' + n + ' / ' + entries.length + ' files…'); await tick(); }
   }
   setStatus('Saving…');
   await sync(false);
   show();
-  if (!hasAssets()) setStatus('This archive does not contain Geometry Dash assets (GJ_LaunchSheet.plist not found).');
+  if (!hasAssets()) setStatus('No Geometry Dash assets found in this file (GJ_LaunchSheet.plist is missing).');
+}
+
+async function importAkrile(u8) {
+  if (typeof Akrile === 'undefined') throw new Error('akrile.js is missing next to index.html');
+  await Akrile.ready;
+  const z = await Akrile.loadAsync(u8);
+  const entries = Object.keys(z.files).filter(n => !n.endsWith('/')).map(n => ({ name: n, bytes: () => z.file(n).async('uint8array') }));
+  await writeEntries(entries, 'Unpacking');
+}
+
+async function importZip(u8) {
+  if (typeof JSZip === 'undefined') await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+  const z = await JSZip.loadAsync(u8);
+  const entries = Object.values(z.files).filter(f => !f.dir).map(f => ({ name: f.name, bytes: () => f.async('uint8array') }));
+  await writeEntries(entries, 'Unpacking');
+}
+
+// Sniff the format by magic bytes, not by file name.
+async function importBytes(u8) {
+  const m = String.fromCharCode(u8[0], u8[1], u8[2], u8[3]);
+  if (m === 'AKRL') return importAkrile(u8);
+  if (m.startsWith('PK')) return importZip(u8);
+  throw new Error('unknown file format (expected .akrile, .apk or .zip)');
+}
+
+// Optional: a Resources.akrile deployed next to the page (private deployments) is picked up automatically.
+async function tryAutoFetch() {
+  try {
+    setStatus('Looking for Resources.akrile…');
+    const r = await fetch('Resources.akrile', { cache: 'no-cache' });
+    if (!r.ok) return false;
+    setStatus('Downloading Resources.akrile…');
+    const u8 = new Uint8Array(await r.arrayBuffer());
+    if (String.fromCharCode(u8[0], u8[1], u8[2], u8[3]) !== 'AKRL') return false;  // e.g. an SPA fallback page
+    await importAkrile(u8);
+    return true;
+  } catch (e) { console.warn('auto-fetch failed:', e); return false; }
 }
 
 function wipe(dir) {
@@ -108,11 +154,18 @@ var Module = {
     fsx.mount(fsx.filesystems.IDBFS, {}, '/Resources');
     fsx.mount(fsx.filesystems.IDBFS, {}, '/save');
     await sync(true);
+    if (!hasAssets()) await tryAutoFetch();
     show();
   }
 };
 
-$('file').addEventListener('change', e => { if (e.target.files[0]) importArchive(e.target.files[0]).catch(err => setStatus('Import failed: ' + err.message)); });
+$('file').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try { setStatus('Reading ' + f.name + '…'); await importBytes(new Uint8Array(await f.arrayBuffer())); }
+  catch (err) { setStatus('Import failed: ' + err.message); }
+  e.target.value = '';
+});
 $('reset').addEventListener('click', async () => { wipe('/Resources'); await sync(false); show(); });
 $('start').addEventListener('click', () => {
   $('setup').hidden = true;      // the click is the user gesture that unlocks audio

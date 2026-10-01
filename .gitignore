@@ -2,6 +2,7 @@
 Resources/
 assets/
 *.apk
+*.akrile
 
 # Build output
 build/

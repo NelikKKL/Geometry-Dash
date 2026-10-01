@@ -50,7 +50,7 @@ jobs:
       - name: Collect site
         run: |
           mkdir -p site
-          cp build-web/index.html build-web/index.js build-web/index.wasm site/
+          cp build-web/index.html build-web/index.js build-web/index.wasm build-web/akrile.js site/
           touch site/.nojekyll
           ls -lh site
       - uses: actions/upload-artifact@v4
