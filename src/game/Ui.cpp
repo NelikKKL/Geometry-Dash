@@ -53,7 +53,7 @@ void Button::onUp(float px, float py) {
 
 void Button::draw() {
     float s = base_ * cur_;
-    E().drawSprite(spr_, x, y, s, s);
+    E().drawSprite(spr_, x, y, s, s, 0, tint, 255, flipX);
     if (!label_.empty()) E().drawText(E().font("bigFont.fnt"), label_, x, y + 2, labelScale_ * s);
 }
 

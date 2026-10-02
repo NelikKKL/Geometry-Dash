@@ -6,19 +6,19 @@
 
 namespace ogd {
 
-void drawBackground(float scrollX, Color tint) {
+void drawBackground(float scrollX, Color tint, float yOffset) {
     Sprite bg = E().sprite("game_bg_01_001.png");
     if (!bg) { E().clear(tint); return; }
     float w = bg.w;
     float start = -std::fmod(scrollX, w);
     if (start > 0) start -= w;
-    for (float x = start; x < kW; x += w) E().drawSprite(bg, x + w / 2, kH / 2.f, 1, 1, 0, tint);
+    for (float x = start; x < kW; x += w) E().drawSprite(bg, x + w / 2, kH / 2.f - yOffset * 0.1f, 1, 1, 0, tint);
 }
 
-void drawGround(float scrollX, Color tint) {
+void drawGround(float scrollX, Color tint, float yOffset) {
     Sprite g = E().sprite("groundSquare_001.png");
     if (!g) return;
-    const float bottom = -50.f;
+    const float bottom = -50.f - yOffset;
     const float top = bottom + g.h;  // floor line; cube (size 60) rests here when centre Y = 236
     float start = -std::fmod(scrollX, g.w);
     if (start > 0) start -= g.w;
@@ -53,6 +53,18 @@ Color paletteColor(int i) {
     static const Color pal[] = {{125, 255, 0}, {0, 255, 0}, {0, 255, 125}, {0, 255, 255}, {0, 125, 255}, {0, 0, 255},
                                 {125, 0, 255}, {255, 0, 255}, {255, 0, 125}, {255, 0, 0}, {255, 125, 0}, {255, 255, 0}};
     return pal[((i % 12) + 12) % 12];
+}
+
+void drawCeiling(float scrollX, Color tint, float yOffset, float planeHeightPx) {
+    Sprite g = E().sprite("groundSquare_001.png");
+    if (!g) return;
+    const float edge = planeHeightPx - yOffset;           // the visible ceiling line (screen y, y-up)
+    if (edge > kH + g.h) return;
+    float start = -std::fmod(scrollX, g.w);
+    if (start > 0) start -= g.w;
+    for (float x = start; x < kW; x += g.w) E().drawSprite(g, x + g.w / 2, edge + g.h / 2, 1, -1, 0, tint);
+    Sprite line = E().sprite("floor.png");
+    if (line) E().drawSprite(line, kW / 2.f, edge, std::fmax(1.f, kW / line.w), 1);
 }
 
 } // namespace ogd

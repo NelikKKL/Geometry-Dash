@@ -54,13 +54,18 @@ public:
     Sprite sprite(const std::string& name);            // sheet frame or standalone image
     Font* font(const std::string& fntName);
     Mix_Music* music(const std::string& name);
+    void playMusic(const std::string& name, int loops);   // restarts from the beginning; no-op if audio is off
+    void stopMusic();
+    void playSfx(const std::string& name, int volume = MIX_MAX_VOLUME);
     bool readText(const std::string& name, std::string& out) const;
 
     // ---- drawing (y-up design coordinates, centre-anchored) -------------
     void clear(Color c);
     void drawSprite(const Sprite& s, float cx, float cy, float sx = 1, float sy = 1, float rotDeg = 0,
                     Color col = {}, Uint8 alpha = 255, bool flipX = false, bool flipY = false);
-    void drawSpriteCropped(const Sprite& s, float leftX, float cy, float fraction, Color col = {}); // left-anchored
+    // Repeats the sprite horizontally to cover `width` px starting at leftX (the last tile is cropped). Left-anchored.
+    void drawSpriteTiledX(const Sprite& s, float leftX, float cy, float width, Color col = {});
+    void drawSpriteCropped(const Sprite& s, float leftX, float cy, float fraction, Color col = {}, float scale = 1.f); // left-anchored
     void drawText(Font* f, const std::string& text, float x, float y, float scale = 1, Align a = Align::Center,
                   Color col = {}, Uint8 alpha = 255);
     void fillRect(float x, float y, float w, float h, Color c, Uint8 alpha); // x,y = bottom-left
@@ -84,6 +89,7 @@ private:
     std::unordered_map<std::string, Sprite> sprites_;
     std::unordered_map<std::string, Font> fonts_;
     std::unordered_map<std::string, Mix_Music*> music_;
+    std::unordered_map<std::string, Mix_Chunk*> sfx_;
 };
 
 Engine& E();

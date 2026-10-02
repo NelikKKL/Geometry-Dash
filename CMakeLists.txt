@@ -12,14 +12,15 @@ option(OGD_BUILD_TESTS "Build unit tests" ON)
 # --- core: pure C++, no SDL (parsers, physics, save data) -------------------
 add_library(ogd_core STATIC
   src/core/Plist.cpp src/core/Atlas.cpp src/core/BMFont.cpp src/core/Save.cpp
-  src/core/Inflate.cpp src/core/Level.cpp)
+  src/core/Inflate.cpp src/core/Level.cpp src/core/ObjectTable.cpp src/core/Sim.cpp)
 target_include_directories(ogd_core PUBLIC src libs)
 
 # --- game -------------------------------------------------------------------
 add_executable(OpenGD
   src/main.cpp
   src/engine/Engine.cpp
-  src/game/App.cpp src/game/Ui.cpp src/game/Popup.cpp src/game/World.cpp src/game/Scenes.cpp)
+  src/game/App.cpp src/game/Ui.cpp src/game/Popup.cpp src/game/World.cpp src/game/Scenes.cpp
+  src/game/LevelSelect.cpp src/game/PlayScene.cpp)
 target_link_libraries(OpenGD PRIVATE ogd_core)
 
 if(EMSCRIPTEN)
@@ -58,4 +59,21 @@ if(OGD_BUILD_TESTS AND NOT EMSCRIPTEN)
   target_link_libraries(core_tests PRIVATE ogd_core)
   target_compile_definitions(core_tests PRIVATE OGD_TEST_DATA="${CMAKE_SOURCE_DIR}/tests/data")
   add_test(NAME core_tests COMMAND core_tests)
+
+  add_executable(sim_tests tests/sim_tests.cpp)
+  target_link_libraries(sim_tests PRIVATE ogd_core)
+  add_test(NAME sim_tests COMMAND sim_tests)
+
+  # runs the real scenes on a software fake of SDL and dumps frames (manual, needs assets):
+  #   render_harness Resources "run 2.5; click 722 313; run 1; shot select.ppm"
+  add_executable(render_harness
+    tests/render_harness.cpp tests/fake_sdl/fake_sdl.cpp src/engine/Engine.cpp
+    src/game/App.cpp src/game/Ui.cpp src/game/Popup.cpp src/game/World.cpp src/game/Scenes.cpp
+    src/game/LevelSelect.cpp src/game/PlayScene.cpp)
+  target_include_directories(render_harness PRIVATE tests/fake_sdl)   # shadows the real SDL headers
+  target_link_libraries(render_harness PRIVATE ogd_core)
+
+  # look-ahead bot that tries to complete level files (manual: sim_bot Resources/level_0.txt)
+  add_executable(sim_bot tests/sim_bot.cpp)
+  target_link_libraries(sim_bot PRIVATE ogd_core)
 endif()

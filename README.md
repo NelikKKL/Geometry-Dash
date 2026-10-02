@@ -10,13 +10,26 @@ Runs natively (Linux/Windows/macOS) and in the browser via Emscripten/WebAssembl
 
 | Feature | State |
 |---|---|
-| Loading screen, sprite sheets (.plist), bitmap fonts (.fnt) | done |
-| Main menu (buttons, bounce animation, scrolling background, running cube, music) | done |
-| Play scene: ground, background, cube jump physics (ported from the original code) | done |
-| Garage, creator, options, stats, achievements | placeholder popups |
-| Level parser (plain text and base64+gzip/zlib), 7 official levels load with 0 warnings | done |
-| Level playback: object-id -> sprite table, collisions, death | TODO (currently a coloured-box debug view of level 0) |
-| Particles, motion streak, ship mode, sound effects | TODO |
+| Loading screen, sprite sheets, bitmap fonts, main menu, popups | done |
+| Level select (7 official levels, best progress saved) | done |
+| Level parser (plain text and base64+gzip/zlib) | done, 7 official levels load with 0 warnings |
+| Gameplay: cube, ship, gravity portals, pads, orbs, blocks/slabs, spikes, colour triggers | done (see "Accuracy") |
+| Death burst + restart, level complete screen, progress bar, music, sound effects | done |
+| Garage, creator, options, stats, achievements, practice mode | placeholder popups / TODO |
+| Decoration with no confident sprite match (ids 15, 22-24, 26, 27, 32, 33, 41) | not drawn |
+
+## Accuracy: what is verified and what is approximate
+
+* **Verified by data:** the level format; the id -> sprite mapping for blocks, spikes, portals, pads/orbs and the
+  white/black ground decoration (derived from the data, see `src/core/ObjectTable.h`); cube jump physics are the
+  constants of the original OpenGD code (jump height ~2.2 blocks).
+* **Approximate (tuned, not copied from the original):** hitbox sizes, the 1.5-unit tolerance when squeezing
+  through 1-block gaps, ship physics, pad/orb strength. `id 9` (black ground thorns) is treated as decoration:
+  in several levels they cover the whole floor of stretches that have to be run on.
+* **Checked by the look-ahead bot** (`sim_bot`, horizon 250 frames): Stereo Madness is completable in the simulation,
+  including both ship sections. The other levels were not proven completable (the greedy bot gets stuck in dead
+  ends, which says nothing about the physics); play-test them.
+* Not implemented: practice mode, checkpoints, the level-end wall, dual mode, speed portals, other cube/ship icons.
 
 ## Assets
 
@@ -70,18 +83,18 @@ pip install playwright pillow && playwright install chromium
 python3 tests/web_smoke.py build-web /path/to/Geometry_Dash_1_0.apk
 ```
 
-Controls: mouse / touch / <kbd>Space</kbd> / <kbd>↑</kbd> to jump, <kbd>Esc</kbd> to go back.
+Controls: mouse / touch / <kbd>Space</kbd> / <kbd>↑</kbd> to jump or fly, <kbd>Esc</kbd> to go back; level select: <kbd>←</kbd>/<kbd>→</kbd>, <kbd>Enter</kbd>.
 
 ## Layout
 
 ```
 src/core/     pure C++: plist/sprite-sheet/BMFont/level parsers, inflate+gzip, cube physics, save data (unit-tested)
 src/engine/   SDL2 wrapper: window, renderer, asset index/cache, audio, text, 9-slice
-src/game/     scenes (loading, menu, play), UI button, popup
+src/game/     scenes (loading, menu, level select, play), UI button, popup
 web/shell.html  Emscripten page: asset import, IndexedDB persistence, start button
 web/akrile.js   .akrile archive library (WASM core embedded)
 tools/        akrile-tool.mjs (pack/unpack/list assets + extract levels), leveldump.cpp
-tests/        dependency-free unit tests
+tests/        unit tests (core, sim), sim_bot (plays levels), render_harness + fake_sdl (runs real scenes natively, dumps frames)
 ```
 
 ## CI
@@ -92,3 +105,16 @@ deploys it to GitHub Pages (enable *Settings → Pages → Source: GitHub Action
 ## License
 
 GPL-3.0, see `LICENSE`. Geometry Dash is a trademark of RobTop Games; this project is not affiliated with it.
+
+## Testing without a browser
+
+```bash
+ctest --test-dir build --output-on-failure                       # core + simulation unit tests
+OGD_LEVELS_DIR=Resources ctest --test-dir build                  # + parse every official level, check every id is known
+./build/sim_bot Resources/level_0.txt                            # H=250 ./build/sim_bot ... for a longer look-ahead
+./build/render_harness Resources "run 2.5; click 722 313; run 1.2; startx 4300; click 640 428; run 0.5; shot x.ppm"
+```
+
+`render_harness` links the real game code against a small software fake of SDL (`tests/fake_sdl`, test-only), so
+scenes, sprite placement and input can be checked without Emscripten. Script commands: `run <s>`, `click x y`,
+`down x y`, `up x y`, `key <space|esc|left|right|enter> <down|up>`, `startx <units>`, `ship`, `shot <file.ppm>`.

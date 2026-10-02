@@ -69,6 +69,7 @@ bool Engine::init(const std::string& root, const std::string& savePath) {
 
 void Engine::shutdown() {
     for (auto& kv : music_) if (kv.second) Mix_FreeMusic(kv.second);
+    for (auto& kv : sfx_) if (kv.second) Mix_FreeChunk(kv.second);
     for (auto& kv : textures_) if (kv.second) SDL_DestroyTexture(kv.second);
     if (audioOk) Mix_CloseAudio();
     IMG_Quit();
@@ -209,6 +210,33 @@ Mix_Music* Engine::music(const std::string& name) {
     return m;
 }
 
+void Engine::playMusic(const std::string& name, int loops) {
+    if (!audioOk) return;
+    if (Mix_Music* m = music(name)) Mix_PlayMusic(m, loops);
+}
+
+void Engine::stopMusic() {
+    if (audioOk) Mix_HaltMusic();
+}
+
+void Engine::playSfx(const std::string& name, int volume) {
+    if (!audioOk) return;
+    auto it = sfx_.find(name);
+    if (it == sfx_.end()) {
+        Mix_Chunk* c = nullptr;
+        std::string p = resolve(name);
+        if (!p.empty()) {
+            c = Mix_LoadWAV(p.c_str());
+            if (!c) SDL_Log("Failed to load sound %s: %s", p.c_str(), Mix_GetError());
+        }
+        it = sfx_.emplace(name, c).first;
+    }
+    if (it->second) {
+        Mix_VolumeChunk(it->second, volume);
+        Mix_PlayChannel(-1, it->second, 0);
+    }
+}
+
 // ---------------------------------------------------------------- drawing
 
 void Engine::clear(Color c) {
@@ -252,17 +280,30 @@ void Engine::drawSprite(const Sprite& s, float cx, float cy, float sx, float sy,
     SDL_RenderCopyExF(ren, s.tex, &s.src, &dst, angle, nullptr, (SDL_RendererFlip)flip);
 }
 
-void Engine::drawSpriteCropped(const Sprite& s, float leftX, float cy, float fraction, Color col) {
+void Engine::drawSpriteCropped(const Sprite& s, float leftX, float cy, float fraction, Color col, float scale) {
     if (!s.tex || s.rotated) return;
     fraction = std::max(0.f, std::min(1.f, fraction));
     int sw = (int)(s.src.w * fraction);
     if (sw <= 0) return;
     SDL_Rect src{s.src.x, s.src.y, sw, s.src.h};
     float k = s.w / s.src.w;
-    SDL_FRect dst{leftX, (kH - cy) - s.h / 2, sw * k, s.h};
+    SDL_FRect dst{leftX, (kH - cy) - s.h * scale / 2, sw * k * scale, s.h * scale};
     SDL_SetTextureColorMod(s.tex, col.r, col.g, col.b);
     SDL_SetTextureAlphaMod(s.tex, 255);
     SDL_RenderCopyF(ren, s.tex, &src, &dst);
+}
+
+void Engine::drawSpriteTiledX(const Sprite& s, float leftX, float cy, float width, Color col) {
+    if (!s.tex || s.rotated || width <= 0 || s.w <= 0) return;
+    SDL_SetTextureColorMod(s.tex, col.r, col.g, col.b);
+    SDL_SetTextureAlphaMod(s.tex, 255);
+    const float k = s.w / s.src.w;
+    for (float x = 0; x < width; x += s.w) {
+        const float w = std::min(s.w, width - x);
+        SDL_Rect src{s.src.x, s.src.y, std::max(1, (int)(w / k)), s.src.h};
+        SDL_FRect dst{leftX + x, (kH - cy) - s.h / 2, w, s.h};
+        SDL_RenderCopyF(ren, s.tex, &src, &dst);
+    }
 }
 
 void Engine::drawText(Font* f, const std::string& text, float x, float y, float scale, Align a, Color col, Uint8 alpha) {

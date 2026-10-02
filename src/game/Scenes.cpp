@@ -5,7 +5,6 @@
 #include <cstdlib>
 #include <vector>
 
-#include "core/Level.h"
 #include "game/Popup.h"
 #include "game/Ui.h"
 #include "game/World.h"
@@ -53,7 +52,7 @@ public:
         E().drawSprite(groove, kW / 2.f, gy);
         float frac = queue_.empty() ? 1.f : (float)next_ / (float)queue_.size();
         float left = kW / 2.f - groove.w / 2 + 4;
-        E().drawSpriteCropped(bar, left, gy, frac * ((groove.w - 8) / std::fmax(1.f, bar.w)));
+        E().drawSpriteTiledX(bar, left, gy, (groove.w - 8) * frac);
     }
 
 private:
@@ -85,7 +84,7 @@ public:
         for (int i = 0; i < 3; ++i) {
             auto p = toScreen(-70 + 0.9f * lx[i], 0);
             std::function<void()> cb;
-            if (i == 1) cb = [] { app().goTo([] { return makePlayScene(); }); };
+            if (i == 1) cb = [] { E().playSfx("playSound_01.ogg"); app().goTo([] { return makeLevelSelectScene(0); }); };
             else if (i == 0) cb = [this] { alert("Garage", "Icon garage is not implemented yet."); };
             else cb = [this] { alert("Creator", "The level editor is not implemented yet."); };
             buttons_.emplace_back(names[i], p.first, p.second, 0.9f * 1.13f, cb);
@@ -169,96 +168,9 @@ private:
     float scroll_ = 0, bgScroll_ = 0, jumpTimer_ = 1.5f, holdTime_ = 0;
 };
 
-// ======================================================================= Play
-class PlayScene : public Scene {
-public:
-    PlayScene() : back_("GJ_arrow_01_001.png", 50.f, kH - 50.f, 1.f, [] { app().goTo([] { return makeMenuScene(); }); }) {
-        player_.x = 0;
-        loadLevel("level_0.txt");
-        main_ = paletteColor(E().save.mainColor);
-        sec_ = paletteColor(E().save.secondaryColor);
-        if (E().audioOk) Mix_HaltMusic();
-    }
-
-    void update(float dt) override {
-        back_.update(dt);
-        stepPlayer(player_, dt * 60.0);
-        // no collisions yet: loop the level so the debug view keeps running
-        if (hasLevel_ && player_.x > level_.maxX() * kHdScale + 800) player_.x = 0;
-        camX_ = (float)player_.x - kStartOffset;
-    }
-
-    void draw() override {
-        drawBackground(camX_ * 0.1f, bgTint_);
-        drawGround(camX_, groundTint_);
-        drawLevelDebug();
-        // "Attempt 1" label lives in world space near the start
-        E().drawText(E().font("bigFont.fnt"), "Attempt 1", 940.f - camX_, 470.f, 1.0f);
-        drawCube(std::min(13, std::max(1, E().save.cube)), player_, camX_, main_, sec_);
-        back_.draw();
-    }
-
-    void onDown(float x, float y) override {
-        if (back_.onDown(x, y)) return;
-        player_.holding = true;
-    }
-    void onUp(float x, float y) override {
-        back_.onUp(x, y);
-        player_.holding = false;
-    }
-    void onKey(SDL_Keycode k, bool down) override {
-        if (k == SDLK_SPACE || k == SDLK_UP || k == SDLK_w) player_.holding = down;
-        else if (k == SDLK_ESCAPE && down) app().goTo([] { return makeMenuScene(); });
-    }
-
-private:
-    void loadLevel(const char* file) {
-        std::string txt;
-        if (!E().readText(file, txt)) return;           // level files are optional (APK bundles from `pack` include them)
-        LevelParseResult r = parseLevelString(txt);
-        if (!r.ok) { SDL_Log("level %s: %s", file, r.error.c_str()); return; }
-        if (r.warningCount) SDL_Log("level %s: %zu warnings", file, r.warningCount);
-        level_ = std::move(r.level);
-        hasLevel_ = true;
-        const auto& st = level_.settings;
-        if (st.hasBackground) bgTint_ = {st.background.r, st.background.g, st.background.b};
-        if (st.hasGround) groundTint_ = {st.ground.r, st.ground.g, st.ground.b};
-    }
-
-    // Placeholder renderer: coloured boxes until the object-id -> sprite table exists.
-    // GD units -> design px: x*2, and y*2 above the floor line (cube centre y=15 units -> 236 px).
-    void drawLevelDebug() {
-        if (!hasLevel_) return;
-        const float floorY = (float)kGroundY - (float)kPlayerSize / 2;
-        auto r = level_.range((camX_ - 100) / (float)kHdScale, (camX_ + kW + 100) / (float)kHdScale);
-        for (size_t i = r.first; i < r.second; ++i) {
-            const LevelObject& o = level_.objects[i];
-            if (o.id == kObjColorTriggerBG || o.id == kObjColorTriggerGround) continue;
-            const float sx = o.x * (float)kHdScale - camX_;
-            const float sy = floorY + o.y * (float)kHdScale;
-            float w = 60, h = 60;
-            Color c{140, 170, 255};
-            if (o.id == 8) c = {255, 70, 70};
-            else if (o.id == 9 || o.id == 39) { c = {200, 40, 40}; h = 30; }
-            else if (o.id > 7) c = {255, 220, 90};
-            E().fillRect(sx - w / 2, sy - h / 2, w, h, c, 150);
-        }
-    }
-
-    static constexpr float kStartOffset = 380.f;  // player's on-screen X
-    Level level_;
-    bool hasLevel_ = false;
-    Color bgTint_ = kBlue, groundTint_ = kBlue;
-    Button back_;
-    PlayerState player_;
-    Color main_, sec_;
-    float camX_ = -kStartOffset;
-};
-
 } // namespace
 
 std::unique_ptr<Scene> makeLoadingScene() { return std::make_unique<LoadingScene>(); }
 std::unique_ptr<Scene> makeMenuScene() { return std::make_unique<MenuScene>(); }
-std::unique_ptr<Scene> makePlayScene() { return std::make_unique<PlayScene>(); }
 
 } // namespace ogd

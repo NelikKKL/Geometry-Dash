@@ -11,6 +11,7 @@
 #include "core/Atlas.h"
 #include "core/Inflate.h"
 #include "core/Level.h"
+#include "core/ObjectTable.h"
 #include "core/BMFont.h"
 #include "core/PlayerPhysics.h"
 #include "core/Plist.h"
@@ -145,6 +146,10 @@ static void testSave() {
     ogd::SaveData b;
     CHECK(b.load(path) && b.cube == 7 && b.mainColor == 5 && b.username == "Ты" && b.secondaryColor == 3);
     std::remove(path.c_str());
+    ogd::SaveData bs; CHECK(bs.recordBest(2, 40) && !bs.recordBest(2, 30) && bs.recordBest(2, 100) && bs.bestOf(2) == 100);
+    CHECK(!bs.recordBest(-1, 5) && !bs.recordBest(99, 5) && bs.bestOf(99) == 0);
+    bs.recordBest(0, 7); CHECK(bs.save(path));
+    ogd::SaveData bl; CHECK(bl.load(path) && bl.bestOf(2) == 100 && bl.bestOf(0) == 7 && bl.bestOf(1) == 0);
     ogd::SaveData c;
     CHECK(!c.load("does_not_exist.json") && c.cube == 1);
     // out-of-range cube is clamped; corrupt file keeps defaults
@@ -288,6 +293,7 @@ static void testRealLevels() {
         CHECK(r.ok && r.warningCount == 0);
         CHECK(r.level.objects.size() >= segs - 1 && r.level.objects.size() <= segs + 1);   // header may or may not exist
         CHECK(r.level.maxX() > 1000);
+        for (const auto& o : r.level.objects) if (!ogd::objectInfo(o.id)) { std::printf("   unknown object id %d in %s\n", o.id, name); CHECK(false); break; }
         ++files; objects += r.level.objects.size();
     }
     std::printf("   real levels: %d files, %zu objects\n", files, objects);

@@ -18,6 +18,8 @@ public:
     void onUp(float x, float y);
 
     float x, y;
+    bool flipX = false;
+    Color tint;
 
 private:
     bool hit(float px, float py) const;
