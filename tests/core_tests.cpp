@@ -12,6 +12,8 @@
 #include "core/Inflate.h"
 #include "core/Level.h"
 #include "core/ObjectTable.h"
+#include "core/Palette.h"
+#include "core/Unlocks.h"
 #include "core/BMFont.h"
 #include "core/PlayerPhysics.h"
 #include "core/Plist.h"
@@ -300,8 +302,31 @@ static void testRealLevels() {
     CHECK(files > 0);
 }
 
+static void testUnlocks() {
+    using namespace ogd;
+    SaveData s;
+    for (int i = 1; i <= 4; ++i) CHECK(isUnlocked(iconUnlockRule(i), s, 7));
+    for (int c = 0; c <= 3; ++c) CHECK(isUnlocked(colorUnlockRule(c), s, 7));
+    int lockedIcons = 0, lockedColors = 0;
+    for (int i = 1; i <= kIconCount; ++i) lockedIcons += !isUnlocked(iconUnlockRule(i), s, 7);
+    for (int c = 0; c < kPaletteSize; ++c) lockedColors += !isUnlocked(colorUnlockRule(c), s, 7);
+    CHECK(lockedIcons == 9 && lockedColors == 8);          // 4+9 icons and 4+8 colours, like the original garage
+    CHECK(iconUnlockRule(5).kind == UnlockKind::CompleteLevel && iconUnlockRule(5).arg == 0);
+    CHECK(!isUnlocked(iconUnlockRule(5), s, 7));
+    s.recordBest(0, 99); CHECK(!isUnlocked(iconUnlockRule(5), s, 7));
+    s.recordBest(0, 100); CHECK(isUnlocked(iconUnlockRule(5), s, 7) && isUnlocked(colorUnlockRule(4), s, 7));
+    CHECK(!isUnlocked(iconUnlockRule(6), s, 7) && s.completedLevels(7) == 1);
+    for (int l = 1; l < 4; ++l) s.recordBest(l, 100);
+    CHECK(isUnlocked(iconUnlockRule(12), s, 7) && !isUnlocked(iconUnlockRule(13), s, 7));
+    for (int l = 4; l < 7; ++l) s.recordBest(l, 100);
+    CHECK(isUnlocked(iconUnlockRule(13), s, 7) && isUnlocked(colorUnlockRule(11), s, 7));
+    SaveData d; d.debugUnlockAll = true; CHECK(isUnlocked(iconUnlockRule(13), d, 7));
+    // palette wraps and matches the colours seen in the original garage
+    CHECK(paletteRgb(0).r == 125 && paletteRgb(0).g == 255 && paletteRgb(3).b == 255 && paletteRgb(12).r == 125 && paletteRgb(-1).g == 255);
+}
+
 int main() {
-    testPlist(); testAtlas(); testFont(); testPhysics(); testSave(); testInflate(); testLevel(); testRealLevels();
+    testPlist(); testAtlas(); testFont(); testPhysics(); testSave(); testInflate(); testLevel(); testRealLevels(); testUnlocks();
     if (failures) { std::printf("%d check(s) failed\n", failures); return 1; }
     std::printf("all core tests passed\n");
     return 0;

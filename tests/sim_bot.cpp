@@ -59,6 +59,13 @@ int main(int argc, char** argv) {
         SimConfig cfg;
         if (const char* e = std::getenv("PAD")) cfg.padBoost = std::atof(e);
         if (const char* e = std::getenv("ORB")) cfg.orbBoost = std::atof(e);
+        if (const char* e = std::getenv("SHIP_UP")) cfg.shipAccelUp = std::atof(e);
+        if (const char* e = std::getenv("SHIP_DOWN")) cfg.shipAccelDown = std::atof(e);
+        if (const char* e = std::getenv("SHIP_MAXUP")) cfg.shipMaxUp = std::atof(e);
+        if (const char* e = std::getenv("SHIP_MAXDOWN")) cfg.shipMaxDown = std::atof(e);
+        if (const char* e = std::getenv("STARTX")) cfg.startX = std::atof(e);
+        if (std::getenv("SHIP")) cfg.startAsShip = true;
+        const double stopX = std::getenv("STOPX") ? std::atof(std::getenv("STOPX")) : 0.0;   // count reaching this x as success
         Simulation sim(r.level, cfg);
         std::mt19937 rng(12345);
         const int H = std::getenv("H") ? std::atoi(std::getenv("H")) : 70;
@@ -68,7 +75,7 @@ int main(int argc, char** argv) {
         Plan carry;
         struct T { int f; double x, y, vy; int h, g; }; std::vector<T> trace;
         const int cap = (int)(sim.endX() / 5.19) + 600;
-        while (!sim.player().dead && !sim.player().finished && frame < cap) {
+        while (!sim.player().dead && !sim.player().finished && !(stopX > 0 && sim.player().x >= stopX) && frame < cap) {
             const bool ship = sim.player().mode == PlayMode::Ship;
             std::vector<Plan> plans = ship ? shipPlans : cubePlans;
             // random plans: piecewise-constant segments
@@ -96,7 +103,7 @@ int main(int argc, char** argv) {
             ++frame;
         }
         const auto& p = sim.player();
-        if (p.finished) std::printf("%-28s COMPLETED  %5d frames (%.1fs), %d tight replans\n", argv[a], frame, frame / 60.0, replans);
+        if (p.finished || (stopX > 0 && p.x >= stopX)) std::printf("%-28s COMPLETED  %5d frames (%.1fs), %d tight replans\n", argv[a], frame, frame / 60.0, replans);
         else {
             ++bad;
             std::printf("%-28s FAILED     at x=%.0f y=%.0f (%s, %.0f%%) after %d frames\n", argv[a], p.x, p.y,

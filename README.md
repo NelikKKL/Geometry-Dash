@@ -11,11 +11,12 @@ Runs natively (Linux/Windows/macOS) and in the browser via Emscripten/WebAssembl
 | Feature | State |
 |---|---|
 | Loading screen, sprite sheets, bitmap fonts, main menu, popups | done |
-| Level select (7 official levels, best progress saved) | done |
+| Level select (7 official levels, best progress saved), layout measured from a device screenshot | done |
+| Garage / icon kit: 13 cube icons, 12 colours (main + secondary), name editing, locked entries with unlock hints | done |
 | Level parser (plain text and base64+gzip/zlib) | done, 7 official levels load with 0 warnings |
 | Gameplay: cube, ship, gravity portals, pads, orbs, blocks/slabs, spikes, colour triggers | done (see "Accuracy") |
 | Death burst + restart, level complete screen, progress bar, music, sound effects | done |
-| Garage, creator, options, stats, achievements, practice mode | placeholder popups / TODO |
+| Creator, options, stats, achievements, practice mode | placeholder popups / TODO |
 | Decoration with no confident sprite match (ids 15, 22-24, 26, 27, 32, 33, 41) | not drawn |
 
 ## Accuracy: what is verified and what is approximate
@@ -29,6 +30,14 @@ Runs natively (Linux/Windows/macOS) and in the browser via Emscripten/WebAssembl
 * **Checked by the look-ahead bot** (`sim_bot`, horizon 250 frames): Stereo Madness is completable in the simulation,
   including both ship sections. The other levels were not proven completable (the greedy bot gets stuck in dead
   ends, which says nothing about the physics); play-test them.
+* **Ship** uses the documented ship gravity of 25 blocks/s^2 (GeometryPhysics project) for both thrust and fall, and a
+  speed cap that limits the climb angle to 45 degrees (the first version was 3x too quick). The same document gives
+  a cube launch speed that matches the simulation to 0.1%, but its cube gravity is inconsistent (79 b/s^2 in the
+  formula, 72 in the text, the simulation uses 93), so the cube is unchanged.
+* **Unlocks** are this project's own design (the original uses achievements, which do not exist here): icons 1-4 and
+  colours 1-4 are free; completing level N unlocks icon N+4 and colour N+4; icon 12 needs 4 completed levels,
+  icon 13 and colour 12 need all 7. The rules are one small table in `src/core/Unlocks.cpp`. Hidden debug key in the
+  garage: <kbd>U</kbd> toggles "unlock everything" (not saved).
 * Not implemented: practice mode, checkpoints, the level-end wall, dual mode, speed portals, other cube/ship icons.
 
 ## Assets
@@ -117,4 +126,4 @@ OGD_LEVELS_DIR=Resources ctest --test-dir build                  # + parse every
 
 `render_harness` links the real game code against a small software fake of SDL (`tests/fake_sdl`, test-only), so
 scenes, sprite placement and input can be checked without Emscripten. Script commands: `run <s>`, `click x y`,
-`down x y`, `up x y`, `key <space|esc|left|right|enter> <down|up>`, `startx <units>`, `ship`, `shot <file.ppm>`.
+`down x y`, `up x y`, `key <space|esc|left|right|enter|backspace|a-z> <down|up>`, `text <chars>`, `startx <units>`, `ship`, `shot <file.ppm>`.

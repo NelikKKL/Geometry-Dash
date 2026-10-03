@@ -13,12 +13,13 @@ struct SDL_Rect { int x, y, w, h; };
 struct SDL_FRect { float x, y, w, h; };
 typedef enum { SDL_FLIP_NONE = 0, SDL_FLIP_HORIZONTAL = 1, SDL_FLIP_VERTICAL = 2 } SDL_RendererFlip;
 typedef int32_t SDL_Keycode;
-enum { SDLK_SPACE = 32, SDLK_UP = 1, SDLK_w = 'w', SDLK_ESCAPE = 27, SDLK_LEFT = 2, SDLK_RIGHT = 3, SDLK_a = 'a', SDLK_d = 'd', SDLK_RETURN = 13 };
+enum { SDLK_SPACE = 32, SDLK_UP = 1, SDLK_w = 'w', SDLK_ESCAPE = 27, SDLK_LEFT = 2, SDLK_RIGHT = 3, SDLK_a = 'a', SDLK_d = 'd', SDLK_RETURN = 13, SDLK_BACKSPACE = 8 };
 struct SDL_Keysym { SDL_Keycode sym; };
 struct SDL_KeyboardEvent { Uint32 type; Uint8 repeat; SDL_Keysym keysym; };
 struct SDL_MouseButtonEvent { Uint32 type; Uint8 button; Sint32 x, y; };
-union SDL_Event { Uint32 type; SDL_KeyboardEvent key; SDL_MouseButtonEvent button; };
-enum { SDL_QUIT = 0x100, SDL_KEYDOWN = 0x300, SDL_KEYUP, SDL_MOUSEBUTTONDOWN = 0x401, SDL_MOUSEBUTTONUP };
+struct SDL_TextInputEvent { Uint32 type; char text[32]; };
+union SDL_Event { Uint32 type; SDL_KeyboardEvent key; SDL_MouseButtonEvent button; SDL_TextInputEvent text; };
+enum { SDL_QUIT = 0x100, SDL_KEYDOWN = 0x300, SDL_KEYUP, SDL_TEXTINPUT = 0x303, SDL_MOUSEBUTTONDOWN = 0x401, SDL_MOUSEBUTTONUP };
 #define SDL_BUTTON_LEFT 1
 #define SDL_INIT_VIDEO 1
 #define SDL_INIT_AUDIO 2
@@ -47,6 +48,7 @@ int SDL_RenderCopyF(SDL_Renderer*, SDL_Texture*, const SDL_Rect*, const SDL_FRec
 void SDL_RenderWindowToLogical(SDL_Renderer*, int, int, float*, float*);
 int SDL_PollEvent(SDL_Event*); Uint64 SDL_GetPerformanceCounter(); Uint64 SDL_GetPerformanceFrequency();
 Uint32 SDL_GetTicks(); int SDL_OpenURL(const char*);
+void SDL_StartTextInput(); void SDL_StopTextInput();
 
 // --- test control surface
 void fake_push_event(const SDL_Event& e);

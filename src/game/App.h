@@ -1,6 +1,7 @@
 #pragma once
 #include <functional>
 #include <memory>
+#include <string>
 
 #include "engine/Engine.h"
 
@@ -17,6 +18,7 @@ public:
     virtual void onDown(float x, float y) { (void)x; (void)y; }
     virtual void onUp(float x, float y) { (void)x; (void)y; }
     virtual void onKey(SDL_Keycode k, bool down) { (void)k; (void)down; }
+    virtual void onText(const std::string& utf8) { (void)utf8; }   // while SDL text input is active
 };
 
 // Owns the running scene, handles fade transitions and the frame loop.

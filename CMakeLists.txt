@@ -12,7 +12,7 @@ option(OGD_BUILD_TESTS "Build unit tests" ON)
 # --- core: pure C++, no SDL (parsers, physics, save data) -------------------
 add_library(ogd_core STATIC
   src/core/Plist.cpp src/core/Atlas.cpp src/core/BMFont.cpp src/core/Save.cpp
-  src/core/Inflate.cpp src/core/Level.cpp src/core/ObjectTable.cpp src/core/Sim.cpp)
+  src/core/Inflate.cpp src/core/Level.cpp src/core/ObjectTable.cpp src/core/Sim.cpp src/core/Unlocks.cpp)
 target_include_directories(ogd_core PUBLIC src libs)
 
 # --- game -------------------------------------------------------------------
@@ -20,7 +20,7 @@ add_executable(OpenGD
   src/main.cpp
   src/engine/Engine.cpp
   src/game/App.cpp src/game/Ui.cpp src/game/Popup.cpp src/game/World.cpp src/game/Scenes.cpp
-  src/game/LevelSelect.cpp src/game/PlayScene.cpp)
+  src/game/LevelSelect.cpp src/game/PlayScene.cpp src/game/Garage.cpp)
 target_link_libraries(OpenGD PRIVATE ogd_core)
 
 if(EMSCRIPTEN)
@@ -69,7 +69,7 @@ if(OGD_BUILD_TESTS AND NOT EMSCRIPTEN)
   add_executable(render_harness
     tests/render_harness.cpp tests/fake_sdl/fake_sdl.cpp src/engine/Engine.cpp
     src/game/App.cpp src/game/Ui.cpp src/game/Popup.cpp src/game/World.cpp src/game/Scenes.cpp
-    src/game/LevelSelect.cpp src/game/PlayScene.cpp)
+    src/game/LevelSelect.cpp src/game/PlayScene.cpp src/game/Garage.cpp)
   target_include_directories(render_harness PRIVATE tests/fake_sdl)   # shadows the real SDL headers
   target_link_libraries(render_harness PRIVATE ogd_core)
 

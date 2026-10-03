@@ -40,6 +40,9 @@ void App::handleEvents() {
             if (e.key.repeat || !scene_) break;
             scene_->onKey(e.key.keysym.sym, e.type == SDL_KEYDOWN);
             break;
+        case SDL_TEXTINPUT:
+            if (scene_) scene_->onText(e.text.text);
+            break;
         default: break;
         }
     }

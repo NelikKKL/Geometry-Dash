@@ -36,4 +36,11 @@ private:
 
 float easeBounceOut(float t);
 
+// Largest scale <= maxScale at which `text` fits into maxWidth design px.
+inline float fitScale(Font* f, const std::string& text, float maxWidth, float maxScale) {
+    if (!f) return maxScale;
+    const float w = f->bm.measure(text) * f->scale;
+    return (w <= 0.f || w * maxScale <= maxWidth) ? maxScale : maxWidth / w;
+}
+
 } // namespace ogd

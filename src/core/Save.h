@@ -13,6 +13,14 @@ struct SaveData {
     std::array<int, 16> best{};  // best normal-mode progress per level, percent 0..100
 
     int bestOf(int level) const { return (level >= 0 && level < (int)best.size()) ? best[level] : 0; }
+    bool levelCompleted(int level) const { return bestOf(level) >= 100; }
+    int completedLevels(int levelCount) const {
+        int n = 0;
+        for (int i = 0; i < levelCount; ++i) n += levelCompleted(i);
+        return n;
+    }
+    bool debugUnlockAll = false;  // never saved; toggled by the hidden U key in the garage
+
     // Records progress; returns true if it is a new best.
     bool recordBest(int level, int percent);
 

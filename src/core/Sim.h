@@ -24,8 +24,12 @@ struct SimConfig {
     double maxFall = 15.0;
     double rotateDegPerFrame = (180.0 / 0.43333) / 60.0;
 
-    double shipAccel = 0.8 * 0.958199;
-    double shipMaxV = 8.0;
+    // Ship: 0.257 corresponds to the documented ship gravity of 25 blocks/s^2 (GeometryPhysics project); thrust
+    // while holding is assumed equal. A speed cap equal to xVel means the steepest climb is exactly 45 degrees.
+    double shipAccelUp = 0.257;
+    double shipAccelDown = 0.257;
+    double shipMaxUp = 5.770002;
+    double shipMaxDown = 5.770002;
 
     double padBoost = 16.0;
     double orbBoost = 11.18;

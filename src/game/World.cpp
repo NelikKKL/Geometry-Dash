@@ -1,5 +1,8 @@
 #include "game/World.h"
 
+#include "core/Palette.h"
+
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -48,11 +51,29 @@ Color randomColor() {
     return {(Uint8)(rand() % 256), (Uint8)(rand() % 256), (Uint8)(rand() % 256)};
 }
 
-// Approximation of the GD colour palette (first 12 entries); used for the saved player colours.
 Color paletteColor(int i) {
-    static const Color pal[] = {{125, 255, 0}, {0, 255, 0}, {0, 255, 125}, {0, 255, 255}, {0, 125, 255}, {0, 0, 255},
-                                {125, 0, 255}, {255, 0, 255}, {255, 0, 125}, {255, 0, 0}, {255, 125, 0}, {255, 255, 0}};
-    return pal[((i % 12) + 12) % 12];
+    const Rgb c = paletteRgb(i);
+    return {c.r, c.g, c.b};
+}
+
+void drawVGradient(float yBottom, float yTop, Color bottom, Color top) {
+    const int steps = std::max(2, (int)((yTop - yBottom) / 4.f));
+    const float h = (yTop - yBottom) / steps;
+    for (int i = 0; i < steps; ++i) {
+        const float t = (i + 0.5f) / steps;
+        auto m = [&](Uint8 a, Uint8 b) { return (Uint8)(a + (b - a) * t); };
+        E().fillRect(0, yBottom + i * h, kW, h + 1.f, {m(bottom.r, top.r), m(bottom.g, top.g), m(bottom.b, top.b)}, 255);
+    }
+}
+
+void drawCornerArt(Corner c, float scale) {
+    Sprite a = E().sprite("GJ_sideArt_001.png");
+    if (!a) return;
+    const bool right = (c == Corner::BottomRight || c == Corner::TopRight);
+    const bool top = (c == Corner::TopLeft || c == Corner::TopRight);
+    const float cx = right ? kW - a.srcW * scale / 2 : a.srcW * scale / 2;
+    const float cy = top ? kH - a.srcH * scale / 2 : a.srcH * scale / 2;
+    E().drawSprite(a, cx, cy, scale, scale, 0, {}, 255, right, top);
 }
 
 void drawCeiling(float scrollX, Color tint, float yOffset, float planeHeightPx) {

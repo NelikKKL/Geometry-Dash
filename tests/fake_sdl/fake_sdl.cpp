@@ -43,6 +43,8 @@ Uint64 SDL_GetPerformanceCounter() { return (Uint64)(g_time * 1e9); }
 Uint64 SDL_GetPerformanceFrequency() { return 1000000000ull; }
 Uint32 SDL_GetTicks() { return (Uint32)(g_time * 1000.0); }
 int SDL_OpenURL(const char*) { return 0; }
+void SDL_StartTextInput() {}
+void SDL_StopTextInput() {}
 
 void fake_push_event(const SDL_Event& e) { g_events.push_back(e); }
 void fake_advance(double s) { g_time += s; }

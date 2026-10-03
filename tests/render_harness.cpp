@@ -27,6 +27,8 @@ static SDL_Keycode keyOf(const std::string& n) {
     if (n == "left") return SDLK_LEFT;
     if (n == "right") return SDLK_RIGHT;
     if (n == "enter") return SDLK_RETURN;
+    if (n == "backspace") return SDLK_BACKSPACE;
+    if (n.size() == 1) return n[0];
     E().shutdown();
     return 0;
 }
@@ -45,6 +47,7 @@ int main(int argc, char** argv) {
         else if (cmd == "down") { int x, y; c >> x >> y; mouse(true, x, y); frames(1.0 / 60); }
         else if (cmd == "up") { int x, y; c >> x >> y; mouse(false, x, y); frames(1.0 / 60); }
         else if (cmd == "key") { std::string k, d; c >> k >> d; SDL_Event e{}; e.key.type = d == "down" ? SDL_KEYDOWN : SDL_KEYUP; e.key.keysym.sym = keyOf(k); fake_push_event(e); frames(1.0 / 60); }
+        else if (cmd == "text") { std::string t; std::getline(c >> std::ws, t); SDL_Event e{}; e.text.type = SDL_TEXTINPUT; std::snprintf(e.text.text, sizeof e.text.text, "%s", t.c_str()); fake_push_event(e); frames(1.0 / 60); }
         else if (cmd == "ship") { g_debugStartShip = true; }
         else if (cmd == "startx") { double x; c >> x; g_debugStartX = x; }
         else if (cmd == "shot") { std::string f; c >> f; if (!fake_dump_ppm(fake_renderer(), f.c_str())) std::fprintf(stderr, "cannot write %s\n", f.c_str()); }

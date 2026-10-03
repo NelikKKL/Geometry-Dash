@@ -85,7 +85,7 @@ public:
             auto p = toScreen(-70 + 0.9f * lx[i], 0);
             std::function<void()> cb;
             if (i == 1) cb = [] { E().playSfx("playSound_01.ogg"); app().goTo([] { return makeLevelSelectScene(0); }); };
-            else if (i == 0) cb = [this] { alert("Garage", "Icon garage is not implemented yet."); };
+            else if (i == 0) cb = [] { E().playSfx("playSound_01.ogg"); app().goTo([] { return makeGarageScene(); }); };
             else cb = [this] { alert("Creator", "The level editor is not implemented yet."); };
             buttons_.emplace_back(names[i], p.first, p.second, 0.9f * 1.13f, cb);
         }

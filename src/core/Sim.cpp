@@ -216,8 +216,8 @@ void Simulation::cubeMove(double h) {
 
 void Simulation::shipMove(double h) {
     const double jdt = h * cfg_.speed;
-    lvy_ += (holding_ ? cfg_.shipAccel : -cfg_.shipAccel) * jdt;
-    lvy_ = std::max(-cfg_.shipMaxV, std::min(cfg_.shipMaxV, lvy_));
+    lvy_ += (holding_ ? cfg_.shipAccelUp : -cfg_.shipAccelDown) * jdt;
+    lvy_ = std::max(-cfg_.shipMaxDown, std::min(cfg_.shipMaxUp, lvy_));
     p_.x += h * cfg_.speed * cfg_.xVel;
     const double prev = ly_;
     ly_ += h * cfg_.speed * lvy_;

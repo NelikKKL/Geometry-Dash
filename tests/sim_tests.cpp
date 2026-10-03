@@ -124,7 +124,7 @@ static void testShip() {
     run(sim, 200, [](int) { return false; });
     CHECK(sim.player().mode == PlayMode::Ship && !sim.player().dead);
     CHECK(std::fabs(sim.player().y - 15) < 1e-6);        // resting on the floor, not dead
-    run(sim, 20, [](int) { return true; });              // hold: climbs
+    run(sim, 30, [](int) { return true; });              // hold: climbs
     CHECK(sim.player().y > 60);
     CHECK(sim.player().rotation < -10);                  // nose up (counter-clockwise)
     run(sim, 400, [](int) { return true; });             // keep holding: stops at the ceiling plane
