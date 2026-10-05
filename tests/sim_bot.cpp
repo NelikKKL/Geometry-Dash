@@ -12,13 +12,24 @@
 
 using namespace ogd;
 
-struct Plan { std::vector<uint8_t> hold; };
+// A plan is either a fixed list of button states or (ship only) an altitude regulator: fly towards altitude `a` for
+// `sw` frames, then towards `b`.
+struct Plan { std::vector<uint8_t> hold; bool fb = false; int a = 0, b = 0, sw = 0; };
+
+static bool regulate(const Simulation& s, int target) {
+    const auto& p = s.player();
+    return p.y + 7.0 * p.vy < target;                      // hold while the (predicted) altitude is below the target
+}
+static bool actionAt(const Simulation& s, const Plan& pl, int f) {
+    if (pl.fb) return regulate(s, f < pl.sw ? pl.a : pl.b);
+    return f < (int)pl.hold.size() ? pl.hold[f] : pl.hold.back();
+}
 
 // survival time (frames) of a plan over the horizon; horizon+1 means "alive / finished"
-static int rollout(const Simulation& start, const std::vector<uint8_t>& plan, int horizon) {
+static int rollout(const Simulation& start, const Plan& plan, int horizon) {
     Simulation s = start;
     for (int f = 0; f < horizon; ++f) {
-        s.setHolding(f < (int)plan.size() ? plan[f] : plan.back());
+        s.setHolding(actionAt(s, plan, f));
         s.step(1.0);
         if (s.player().dead) return f;
         if (s.player().finished) return horizon + 1;
@@ -35,9 +46,12 @@ static std::vector<Plan> structured(int horizon, bool ship) {
         out.push_back(p);
     };
     mk(0, 0);                                            // do nothing
-    const int ks[] = {1, 2, 3, 5, 8, 12, 20};
+    const int cubeKs[] = {1, 2, 3, 5, 8, 12, 20};
+    const int shipKs[] = {1, 2, 3, 5, 8, 12, 20, 30, 45, 60, 80};
+    const int* ks = ship ? shipKs : cubeKs;
+    const int nks = ship ? 11 : 7;
     // single press at ANY delay: the bot must not commit to "jump now" while a later takeoff still works
-    for (int r = 0; r < horizon - 2; ++r) for (int k : ks) mk(r, k);
+    for (int r = 0; r < horizon - 2; ++r) for (int ki = 0; ki < nks; ++ki) mk(r, ks[ki]);
     if (ship) {
         for (int k : {2, 5, 10}) for (int r : {1, 3, 6, 10}) for (int k2 : {2, 4, 8}) mk(0, k, r, k2);
     } else {
@@ -58,11 +72,8 @@ int main(int argc, char** argv) {
         if (!r.ok) { std::printf("%s: parse error\n", argv[a]); ++bad; continue; }
         SimConfig cfg;
         if (const char* e = std::getenv("PAD")) cfg.padBoost = std::atof(e);
-        if (const char* e = std::getenv("ORB")) cfg.orbBoost = std::atof(e);
-        if (const char* e = std::getenv("SHIP_UP")) cfg.shipAccelUp = std::atof(e);
-        if (const char* e = std::getenv("SHIP_DOWN")) cfg.shipAccelDown = std::atof(e);
-        if (const char* e = std::getenv("SHIP_MAXUP")) cfg.shipMaxUp = std::atof(e);
-        if (const char* e = std::getenv("SHIP_MAXDOWN")) cfg.shipMaxDown = std::atof(e);
+        if (const char* e = std::getenv("ORB")) cfg.ringBoost = std::atof(e);
+        if (const char* e = std::getenv("SHIP_SCALE")) cfg.shipScale = std::atof(e);
         if (const char* e = std::getenv("STARTX")) cfg.startX = std::atof(e);
         if (std::getenv("SHIP")) cfg.startAsShip = true;
         const double stopX = std::getenv("STOPX") ? std::atof(std::getenv("STOPX")) : 0.0;   // count reaching this x as success
@@ -85,21 +96,29 @@ int main(int argc, char** argv) {
                 while (t < H) { int len = 2 + rng() % 10; for (int j = 0; j < len && t < H; ++j) p.hold[t++] = h; h = !h; }
                 plans.push_back(std::move(p));
             }
+            if (ship) {
+                for (int a = 20; a <= 280; a += 20) { Plan q; q.fb = true; q.a = q.b = a; q.sw = 0; plans.push_back(q); }
+                for (int a = 20; a <= 280; a += 20) for (int b = 20; b <= 280; b += 20) if (a != b)
+                    for (int sw : {30, 60, 100, 150}) { Plan q; q.fb = true; q.a = a; q.b = b; q.sw = sw; plans.push_back(q); }
+            }
             int best = 0, bestScore = -1;
-            if (!carry.hold.empty()) {                    // yesterday's plan, shifted by one frame, usually still works
-                Plan shifted; shifted.hold.assign(carry.hold.begin() + 1, carry.hold.end()); shifted.hold.push_back(0);
-                if (rollout(sim, shifted.hold, H) > H) { plans.clear(); plans.push_back(shifted); bestScore = H + 1; }
+            if (!carry.hold.empty() || carry.fb) {                    // yesterday's plan, shifted by one frame, usually still works
+                Plan shifted = carry;
+                if (carry.fb) shifted.sw = std::max(0, carry.sw - 1);
+                else { shifted.hold.assign(carry.hold.begin() + 1, carry.hold.end()); shifted.hold.push_back(0); }
+                if (rollout(sim, shifted, H) > H) { plans.clear(); plans.push_back(shifted); bestScore = H + 1; }
             }
             for (size_t i = 0; i < plans.size() && bestScore <= H; ++i) {
-                int sc = rollout(sim, plans[i].hold, H);
-                if (sc > bestScore || (sc == bestScore && plans[best].hold[0] && !plans[i].hold[0])) { bestScore = sc; best = (int)i; }
+                int sc = rollout(sim, plans[i], H);
+                if (sc > bestScore || (sc == bestScore && actionAt(sim, plans[best], 0) && !actionAt(sim, plans[i], 0))) { bestScore = sc; best = (int)i; }
                 if (sc > H) break;                       // first fully surviving plan wins (structured ones come first)
             }
-            if (bestScore <= H) { ++replans; carry.hold.clear(); }
+            if (bestScore <= H) { ++replans; carry.hold.clear(); carry.fb = false; }
             carry = plans[best];
-            sim.setHolding(plans[best].hold[0]);
+            const bool act = actionAt(sim, plans[best], 0);
+            sim.setHolding(act);
             sim.step(1.0);
-            trace.push_back({frame, sim.player().x, sim.player().y, sim.player().vy, (int)plans[best].hold[0], (int)sim.player().onGround});
+            trace.push_back({frame, sim.player().x, sim.player().y, sim.player().vy, (int)act, (int)sim.player().onGround});
             ++frame;
         }
         const auto& p = sim.player();
@@ -108,8 +127,11 @@ int main(int argc, char** argv) {
             ++bad;
             std::printf("%-28s FAILED     at x=%.0f y=%.0f (%s, %.0f%%) after %d frames\n", argv[a], p.x, p.y,
                         p.mode == PlayMode::Ship ? "ship" : "cube", sim.progress() * 100, frame);
-            if (std::getenv("TRACE")) for (size_t i = trace.size() > 70 ? trace.size() - 70 : 0; i < trace.size(); ++i)
-                std::printf("   f%5d x=%7.1f y=%6.1f vy=%6.2f hold=%d ground=%d\n", trace[i].f, trace[i].x, trace[i].y, trace[i].vy, trace[i].h, trace[i].g);
+            if (std::getenv("TRACE")) {
+                const size_t tn = std::getenv("TRACE_N") ? (size_t)std::atoi(std::getenv("TRACE_N")) : 70;
+                for (size_t i = trace.size() > tn ? trace.size() - tn : 0; i < trace.size(); i += (tn > 100 ? 6 : 1))
+                    std::printf("   f%5d x=%7.1f y=%6.1f vy=%6.2f hold=%d ground=%d\n", trace[i].f, trace[i].x, trace[i].y, trace[i].vy, trace[i].h, trace[i].g);
+            }
             auto rg = sim.level().range((float)p.x - 40, (float)p.x + 40);
             for (size_t i = rg.first; i < rg.second; ++i) {
                 const auto& o = sim.level().objects[i];

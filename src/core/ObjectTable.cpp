@@ -3,53 +3,47 @@
 namespace ogd {
 namespace {
 
-// Z layers
-constexpr int ZBack = 0, ZDeco = 1, ZPit = 2, ZDSpike = 3, ZBlock = 4, ZSpike = 5, ZPad = kObjZFront;
-
-//                                 id  kind                      sprite                 back                     z       w   h  ox  oy
+//          id kind                 sprite                         back                      z    tint   w    h   ox     oy
 const ObjInfo kTable[] = {
-    {1,  ObjKind::Solid,  "square_01_001.png", nullptr, ZBlock, 30, 30, 0, 0},
-    {2,  ObjKind::Solid,  "square_02_001.png", nullptr, ZBlock, 30, 30, 0, 0},
-    {3,  ObjKind::Solid,  "square_03_001.png", nullptr, ZBlock, 30, 30, 0, 0},
-    {4,  ObjKind::Solid,  "square_04_001.png", nullptr, ZBlock, 30, 30, 0, 0},
-    {5,  ObjKind::Solid,  "square_05_001.png", nullptr, ZBlock, 30, 30, 0, 0},
-    {6,  ObjKind::Solid,  "square_06_001.png", nullptr, ZBlock, 30, 30, 0, 0},
-    {7,  ObjKind::Solid,  "square_07_001.png", nullptr, ZBlock, 30, 30, 0, 0},
-    // hazards: hitboxes are deliberately a bit smaller than the sprite (forgiving, like the original)
-    {8,  ObjKind::Hazard, "spike_01_001.png",  nullptr, ZSpike, 8, 16, 0, -4},
-    {39, ObjKind::Hazard, "spike_02_001.png",  nullptr, ZSpike, 8, 8, 0, -1},
-    {40, ObjKind::Solid,  "plank_01_001.png",  nullptr, ZBlock, 30, 14, 0, 0},
+    {1,  ObjKind::Solid,  "square_01_001.png", nullptr, 502, false, 30, 30, -15, -15},
+    {2,  ObjKind::Solid,  "square_02_001.png", nullptr, 502, false, 30, 30, -15, -15},
+    {3,  ObjKind::Solid,  "square_03_001.png", nullptr, 502, false, 30, 30, -15, -15},
+    {4,  ObjKind::Solid,  "square_04_001.png", nullptr, 502, false, 30, 30, -15, -15},
+    {5,  ObjKind::Deco,   "square_05_001.png", nullptr, 93,  false, 0,  0,  0,   0},    // layer 1, z -7
+    {6,  ObjKind::Solid,  "square_06_001.png", nullptr, 502, false, 30, 30, -15, -15},
+    {7,  ObjKind::Solid,  "square_07_001.png", nullptr, 502, false, 30, 30, -15, -15},
+    {8,  ObjKind::Hazard, "spike_01_001.png",  nullptr, 502, false, 6,  12, -3,  -6},
+    {9,  ObjKind::Hazard, "pit_02_001.png",    nullptr, 502, false, 9,  10.8f, -4.5f, -5.4f},
+    {39, ObjKind::Hazard, "spike_02_001.png",  nullptr, 502, false, 6,  5.6f, -3, -2.8f},
+    {40, ObjKind::Solid,  "plank_01_001.png",  nullptr, 502, false, 30, 14, -15, -7},
 
-    {10, ObjKind::PortalGravityDown, "portal_01_front_001.png", "portal_01_back_001.png", ZPad, 20, 84, 0, 0},
-    {11, ObjKind::PortalGravityUp,   "portal_02_front_001.png", "portal_02_back_001.png", ZPad, 20, 84, 0, 0},
-    {12, ObjKind::PortalCube,        "portal_03_front_001.png", "portal_03_back_001.png", ZPad, 20, 84, 0, 0},
-    {13, ObjKind::PortalShip,        "portal_04_front_001.png", "portal_04_back_001.png", ZPad, 20, 84, 0, 0},
+    {10, ObjKind::PortalGravityDown, "portal_01_front_001.png", "portal_01_back_001.png", 510, false, 25, 75, -12.5f, -37.5f},
+    {11, ObjKind::PortalGravityUp,   "portal_02_front_001.png", "portal_02_back_001.png", 510, false, 25, 75, -12.5f, -37.5f},
+    {12, ObjKind::PortalCube,        "portal_03_front_001.png", "portal_03_back_001.png", 510, false, 34, 86, -17,    -43},
+    {13, ObjKind::PortalShip,        "portal_04_front_001.png", "portal_04_back_001.png", 510, false, 34, 86, -17,    -43},
 
-    {35, ObjKind::Pad, "bump_01_001.png", nullptr, ZPad, 26, 8, 0, 0},
-    {36, ObjKind::Orb, "ring_01_001.png", nullptr, ZPad, 30, 30, 0, 0},
+    {35, ObjKind::Pad, "bump_01_001.png", nullptr, 312, false, 25, 4, -12.5f, -2},
+    {36, ObjKind::Orb, "ring_01_001.png", nullptr, 312, false, 36, 36, -18, -18},
 
-    // decoration
-    {9,  ObjKind::Deco, "pit_01_001.png",      nullptr, ZPit,    0, 0, 0, 0},   // ground "thorns": decoration (a solid strip of them covers floors that must be run on)
-    {16, ObjKind::Deco, "pit_02_001.png",      nullptr, ZPit,    0, 0, 0, 0},
-    {17, ObjKind::Deco, "pit_03_001.png",      nullptr, ZPit,    0, 0, 0, 0},
-    {18, ObjKind::Deco, "d_spikes_01_001.png", nullptr, ZDSpike, 0, 0, 0, 0},
-    {19, ObjKind::Deco, "d_spikes_02_001.png", nullptr, ZDSpike, 0, 0, 0, 0},
-    {20, ObjKind::Deco, "d_spikes_03_001.png", nullptr, ZDSpike, 0, 0, 0, 0},
-    {21, ObjKind::Deco, "d_spikes_04_001.png", nullptr, ZDSpike, 0, 0, 0, 0},
+    // decoration: rods behind everything, white thorn tops and chains in the detail layer
+    {15, ObjKind::Deco, "rod_01_001.png",      nullptr, 94, false, 0, 0, 0, 0},
+    {16, ObjKind::Deco, "rod_02_001.png",      nullptr, 94, false, 0, 0, 0, 0},
+    {17, ObjKind::Deco, "rod_03_001.png",      nullptr, 94, false, 0, 0, 0, 0},
+    {18, ObjKind::Deco, "d_spikes_01_001.png", nullptr, 309, true,  0, 0, 0, 0},
+    {19, ObjKind::Deco, "d_spikes_02_001.png", nullptr, 309, true,  0, 0, 0, 0},
+    {20, ObjKind::Deco, "d_spikes_03_001.png", nullptr, 309, true,  0, 0, 0, 0},
+    {21, ObjKind::Deco, "d_spikes_04_001.png", nullptr, 309, true,  0, 0, 0, 0},
+    {41, ObjKind::Deco, "chain_01_001.png",    nullptr, 309, true,  0, 0, 0, 0},
 
-    {29, ObjKind::TriggerBG,     nullptr, nullptr, ZBack, 0, 0, 0, 0},
-    {30, ObjKind::TriggerGround, nullptr, nullptr, ZBack, 0, 0, 0, 0},
+    {29, ObjKind::TriggerBG,     nullptr, nullptr, 0, false, 0, 0, 0, 0},
+    {30, ObjKind::TriggerGround, nullptr, nullptr, 0, false, 0, 0, 0, 0},
 
-    // present in the data, no confident sprite match
-    {15, ObjKind::Unmapped, nullptr, nullptr, ZDeco, 0, 0, 0, 0},
-    {22, ObjKind::Unmapped, nullptr, nullptr, ZDeco, 0, 0, 0, 0},
-    {23, ObjKind::Unmapped, nullptr, nullptr, ZDeco, 0, 0, 0, 0},
-    {24, ObjKind::Unmapped, nullptr, nullptr, ZDeco, 0, 0, 0, 0},
-    {26, ObjKind::Unmapped, nullptr, nullptr, ZDeco, 0, 0, 0, 0},
-    {27, ObjKind::Unmapped, nullptr, nullptr, ZDeco, 0, 0, 0, 0},
-    {32, ObjKind::Unmapped, nullptr, nullptr, ZDeco, 0, 0, 0, 0},
-    {33, ObjKind::Unmapped, nullptr, nullptr, ZDeco, 0, 0, 0, 0},
-    {41, ObjKind::Unmapped, nullptr, nullptr, ZDeco, 0, 0, 0, 0},
+    // invisible fade / trail triggers
+    {22, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0}, {23, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0},
+    {24, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0}, {25, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0},
+    {26, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0}, {27, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0},
+    {28, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0}, {32, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0},
+    {33, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0},
 };
 
 } // namespace

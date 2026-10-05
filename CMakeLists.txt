@@ -76,4 +76,8 @@ if(OGD_BUILD_TESTS AND NOT EMSCRIPTEN)
   # look-ahead bot that tries to complete level files (manual: sim_bot Resources/level_0.txt)
   add_executable(sim_bot tests/sim_bot.cpp)
   target_link_libraries(sim_bot PRIVATE ogd_core)
+
+  # exact reachability search ("can this level be finished?"): sim_solver Resources/level_4.txt -20 0 8000
+  add_executable(sim_solver tests/sim_solver.cpp)
+  target_link_libraries(sim_solver PRIVATE ogd_core)
 endif()

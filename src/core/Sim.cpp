@@ -7,23 +7,27 @@ namespace ogd {
 namespace {
 
 constexpr double kPi = 3.14159265358979323846;
-constexpr float kEps = 0.01f;
 
-bool overlaps(const Simulation::Box& a, const Simulation::Box& b) {
-    return a.minx < b.maxx - kEps && a.maxx > b.minx + kEps && a.miny < b.maxy - kEps && a.maxy > b.miny + kEps;
+// The original uses Rect::intersectsRect, which counts touching edges as intersecting.
+bool touches(const Simulation::Box& a, const Simulation::Box& b) {
+    return a.minx <= b.maxx && a.maxx >= b.minx && a.miny <= b.maxy && a.maxy >= b.miny;
 }
 
+// Hitbox rect (origin offset + size, relative to the centre) transformed by flip and rotation -> AABB.
 Simulation::Box makeBox(const LevelObject& o, const ObjInfo& info) {
-    // centre offset, flipped then rotated clockwise (y-up)
-    double ox = info.hitOffX * (o.flipX ? -1 : 1), oy = info.hitOffY * (o.flipY ? -1 : 1);
     const double rad = o.rotation * kPi / 180.0;
     const double c = std::cos(rad), s = std::sin(rad);
-    const double rx = ox * c + oy * s, ry = -ox * s + oy * c;
-    // AABB of the rotated rectangle (exact for multiples of 90 degrees)
-    double w = std::fabs(info.hitW * c) + std::fabs(info.hitH * s);
-    double h = std::fabs(info.hitW * s) + std::fabs(info.hitH * c);
-    const double cx = o.x + rx, cy = o.y + ry;
-    return {(float)(cx - w / 2), (float)(cx + w / 2), (float)(cy - h / 2), (float)(cy + h / 2)};
+    double minx = 1e18, maxx = -1e18, miny = 1e18, maxy = -1e18;
+    for (int i = 0; i < 4; ++i) {
+        double px = info.hitOffX + ((i & 1) ? info.hitW : 0);
+        double py = info.hitOffY + ((i & 2) ? info.hitH : 0);
+        if (o.flipX) px = -px;
+        if (o.flipY) py = -py;
+        const double rx = px * c + py * s, ry = -px * s + py * c;       // clockwise rotation, y-up
+        minx = std::min(minx, rx); maxx = std::max(maxx, rx);
+        miny = std::min(miny, ry); maxy = std::max(maxy, ry);
+    }
+    return {(float)(o.x + minx), (float)(o.x + maxx), (float)(o.y + miny), (float)(o.y + maxy)};
 }
 
 bool collidable(ObjKind k) {
@@ -45,7 +49,7 @@ Simulation::Simulation(const Level& level, const SimConfig& cfg) : level_(&level
         if (info && collidable(info->kind)) (*boxes)[i] = makeBox(o, *info);
     }
     boxes_ = boxes;
-    endX_ = level.maxX() + cfg_.endPadding;
+    endX_ = std::max(570.0, (double)level.maxX());      // the original: x of the last object, at least 570
     reset();
 }
 
@@ -53,21 +57,24 @@ void Simulation::reset() {
     p_ = SimPlayer();
     p_.x = cfg_.startX;
     if (cfg_.startAsShip) p_.mode = PlayMode::Ship;
-    p_.y = cfg_.playerSize / 2;
-    ly_ = p_.y;
+    ly_ = cfg_.playerSize / 2;
+    p_.y = ly_;
     lvy_ = 0;
     rot_ = 0;
-    holding_ = pressPending_ = false;
+    onGround_ = true;
+    rising_ = false;
+    holding_ = queuedHold_ = touchedRing_ = false;
     used_.assign(level_->objects.size(), 0);
 }
 
 void Simulation::setHolding(bool h) {
-    if (h && !holding_) pressPending_ = true;
+    if (h && !holding_) queuedHold_ = true;             // pushButton
+    if (!h) queuedHold_ = false;                         // releaseButton
     holding_ = h;
 }
 
 double Simulation::progress() const {
-    return std::max(0.0, std::min(1.0, (p_.x - cfg_.startX) / (endX_ - cfg_.startX)));
+    return std::max(0.0, std::min(1.0, p_.x / endX_));
 }
 
 Simulation::Box Simulation::localBox(const Box& b) const {
@@ -75,166 +82,157 @@ Simulation::Box Simulation::localBox(const Box& b) const {
     return {b.minx, b.maxx, (float)cfg_.planeHeight - b.maxy, (float)cfg_.planeHeight - b.miny};
 }
 
-Simulation::Box Simulation::bodyBox() const {
+Simulation::Box Simulation::outerBox() const {
     const float r = (float)cfg_.playerSize / 2;
     return {(float)p_.x - r, (float)p_.x + r, (float)ly_ - r, (float)ly_ + r};
 }
 
-Simulation::Box Simulation::hazardBox() const {
-    const float r = (float)cfg_.hazardBox / 2;
+Simulation::Box Simulation::innerBox() const {
+    const float r = (float)cfg_.innerSize / 2;
     return {(float)p_.x - r, (float)p_.x + r, (float)ly_ - r, (float)ly_ + r};
+}
+
+void Simulation::setMode(PlayMode m) {
+    if (p_.mode == m) return;
+    p_.mode = m;
+    if (m == PlayMode::Ship) lvy_ /= 2.0;                // setGamemode(Ship): m_dYVel /= 2
+    else rot_ = 0;
+    onGround_ = false;
 }
 
 void Simulation::flipGravity(bool up) {
     if (p_.mirrored == up) return;
     p_.mirrored = up;
     ly_ = cfg_.planeHeight - ly_;
-    lvy_ = -lvy_;
-    p_.onGround = false;
+    lvy_ = -lvy_ / 2.0;                                   // flipGravity: m_dYVel /= 2 (world sign is kept)
 }
 
-bool Simulation::supported() const {
-    const double bottom = ly_ - cfg_.playerSize / 2;
-    if (bottom <= 0.001) return true;
-    auto r = level_->range((float)p_.x - 45.f, (float)p_.x + 45.f);
-    const Box body = bodyBox();
-    for (size_t i = r.first; i < r.second; ++i) {
-        const ObjInfo* info = objectInfo(level_->objects[i].id);
-        if (!info || info->kind != ObjKind::Solid) continue;
-        const Box s = localBox((*boxes_)[i]);
-        if (body.minx < s.maxx - kEps && body.maxx > s.minx + kEps && std::fabs(bottom - s.maxy) < 0.05) return true;
+// PlayerObject::updateJump. dtSlow = dt * 0.9
+void Simulation::updateJump(double dt) {
+    const double g = cfg_.gravity;
+    if (p_.mode == PlayMode::Ship) {
+        double accel = 0.8;
+        if (holding_) accel = -1.0;
+        if (!holding_ && !falling()) accel = 1.2;
+        double boost = 0.4;
+        if (holding_ && falling()) boost = 0.5;
+        lvy_ -= g * dt * accel * boost * cfg_.shipScale;
+        lvy_ = std::max(-cfg_.shipDownLimit, std::min(cfg_.shipUpLimit, lvy_));
+        return;
     }
-    return false;
+    if (holding_ && onGround_) {
+        rising_ = true;
+        onGround_ = false;
+        lvy_ = cfg_.jump;
+        if (!touchedRing_) queuedHold_ = false;
+    } else if (rising_) {
+        lvy_ -= g * dt;
+        if (falling()) { rising_ = false; onGround_ = false; }
+    } else {
+        if (lvy_ < -g * 2.0) onGround_ = false;          // leaving a platform: ~2 frames of "coyote time"
+        lvy_ -= g * dt;
+        lvy_ = std::max(lvy_, -cfg_.maxFall);
+    }
 }
 
-// Returns false if the player died. prevLocalY = local centre y before this substep's vertical move.
-bool Simulation::resolveSolids(double prevLocalY) {
+// PlayerObject::collidedWithObject for a solid block `s` (local space).
+void Simulation::collideSolid(const Box& s) {
+    const bool ship = p_.mode == PlayMode::Ship;
+    const double mod = ship ? cfg_.shipLandMod : cfg_.cubeLandMod;
     const double half = cfg_.playerSize / 2;
-    const double prevBottom = prevLocalY - half, prevTop = prevLocalY + half;
-    auto r = level_->range((float)p_.x - 45.f, (float)p_.x + 45.f);
-    for (size_t i = r.first; i < r.second; ++i) {
-        const ObjInfo* info = objectInfo(level_->objects[i].id);
-        if (!info || info->kind != ObjKind::Solid) continue;
-        const Box s = localBox((*boxes_)[i]);
-        Box body = bodyBox();
-        const float in = (float)cfg_.solidInset;
-        body = {body.minx + in, body.maxx - in, body.miny + in, body.maxy - in};
-        if (!overlaps(body, s)) continue;
 
-        if (prevBottom >= s.maxy - cfg_.landSlack && lvy_ <= 0.0001) {          // landed on top
-            ly_ = s.maxy + half;
-            lvy_ = 0;
-            p_.onGround = true;
-        } else if (p_.mode == PlayMode::Ship && prevTop <= s.miny + cfg_.landSlack && lvy_ >= -0.0001) {  // bumped head
-            ly_ = s.miny - half;
-            if (lvy_ > 0) lvy_ = 0;
-        } else {                                                                   // side / underside hit
-            die();
-            return false;
+    if (lvy_ < 0.0 && ly_ >= s.maxy + mod) {                      // falling onto the top
+        ly_ = s.maxy + half;
+        hitGround();
+    } else if (ship && lvy_ > 0.0 && ly_ <= s.miny + 24.0 && ly_ <= (s.miny + s.maxy) / 2 + half) {   // ship bumps its head
+        ly_ = s.miny - half;
+        hitGround();
+    }
+    if (touches(innerBox(), s)) die();                            // the small inner box decides death
+}
+
+void Simulation::collide() {
+    const double half = cfg_.playerSize / 2;
+    if (p_.mode == PlayMode::Cube) {
+        if (ly_ < half) {                                          // floor (local)
+            if (p_.mirrored) { /* local floor = world ceiling plane: land on it */ }
+            ly_ = half;
+            hitGround();
         }
+        if (p_.mirrored && ly_ > cfg_.planeHeight - half) { die(); return; }   // flipped cube reaching the world floor
+    } else {
+        if (ly_ < cfg_.shipFloor) { ly_ = cfg_.shipFloor; lvy_ = 0; if (!p_.mirrored) onGround_ = true; }
+        const double top = cfg_.planeHeight - cfg_.shipFloor;
+        if (ly_ > top) { ly_ = top; lvy_ = 0; }
     }
-    return true;
-}
 
-bool Simulation::touchesHazard() const {
-    auto r = level_->range((float)p_.x - 45.f, (float)p_.x + 45.f);
-    const Box hb = hazardBox();
-    for (size_t i = r.first; i < r.second; ++i) {
-        const ObjInfo* info = objectInfo(level_->objects[i].id);
-        if (!info || info->kind != ObjKind::Hazard) continue;
-        if (overlaps(hb, localBox((*boxes_)[i]))) return true;
-    }
-    return false;
-}
-
-void Simulation::touchTriggers() {
-    auto r = level_->range((float)p_.x - 45.f, (float)p_.x + 45.f);
-    // portals / pads / orbs use the world-space body box
-    Box body = {(float)p_.x - 15.f, (float)p_.x + 15.f, 0, 0};
-    const double wy = p_.mirrored ? cfg_.planeHeight - ly_ : ly_;
-    body.miny = (float)wy - 15.f;
-    body.maxy = (float)wy + 15.f;
+    touchedRing_ = false;
+    auto r = level_->range((float)p_.x - 60.f, (float)p_.x + 60.f);
+    const Box outer = outerBox();
     for (size_t i = r.first; i < r.second; ++i) {
         const ObjInfo* info = objectInfo(level_->objects[i].id);
         if (!info) continue;
-        const Box& b = (*boxes_)[i];
         switch (info->kind) {
+        case ObjKind::Hazard:
+            if (touches(outerBox(), localBox((*boxes_)[i]))) { die(); return; }
+            break;
+        case ObjKind::Solid: {
+            const Box s = localBox((*boxes_)[i]);
+            if (touches(outerBox(), s)) { collideSolid(s); if (p_.dead) return; }
+            break;
+        }
         case ObjKind::PortalCube:
-            if (overlaps(body, b)) { p_.mode = PlayMode::Cube; }
+            if (touches(outer, localBox((*boxes_)[i]))) setMode(PlayMode::Cube);
             break;
         case ObjKind::PortalShip:
-            if (overlaps(body, b)) { p_.mode = PlayMode::Ship; }
+            if (touches(outer, localBox((*boxes_)[i]))) setMode(PlayMode::Ship);
             break;
         case ObjKind::PortalGravityDown:
-            if (overlaps(body, b)) flipGravity(false);
+            if (touches(outer, localBox((*boxes_)[i]))) flipGravity(false);
             break;
         case ObjKind::PortalGravityUp:
-            if (overlaps(body, b)) flipGravity(true);
+            if (touches(outer, localBox((*boxes_)[i]))) flipGravity(true);
             break;
         case ObjKind::Pad:
-            if (!used_[i] && overlaps(body, b)) {
+            if (!used_[i] && touches(outer, localBox((*boxes_)[i]))) {
                 used_[i] = 1;
-                lvy_ = (p_.mirrored ? 1 : 1) * cfg_.padBoost;   // local space: always "up" away from the floor
-                p_.onGround = false;
+                rising_ = true;                                    // propellPlayer(1)
+                onGround_ = false;
+                lvy_ = cfg_.padBoost;
             }
             break;
         case ObjKind::Orb:
-            if (pressPending_ && !used_[i] && overlaps(body, b)) {
-                used_[i] = 1;
-                pressPending_ = false;
-                lvy_ = cfg_.orbBoost;
-                p_.onGround = false;
+            if (!used_[i] && touches(outer, localBox((*boxes_)[i]))) {
+                touchedRing_ = true;
+                if (queuedHold_ && holding_) {                    // ringJump
+                    used_[i] = 1;
+                    rising_ = true;
+                    queuedHold_ = false;
+                    onGround_ = false;
+                    lvy_ = cfg_.ringBoost;
+                }
             }
             break;
         default: break;
         }
     }
-}
-
-void Simulation::cubeMove(double h) {
-    const double jdt = h * cfg_.speed;
-    if (p_.onGround && !supported()) p_.onGround = false;
-    if (p_.onGround && holding_) {
-        p_.onGround = false;
-        lvy_ = cfg_.jump;
-    } else if (!p_.onGround) {
-        lvy_ = std::max(-cfg_.maxFall, lvy_ - cfg_.gravity * jdt);
-    }
-    p_.x += h * cfg_.speed * cfg_.xVel;
-    const double prev = ly_;
-    ly_ += h * cfg_.speed * lvy_;
-
-    if (ly_ - cfg_.playerSize / 2 < 0) {           // floor
-        ly_ = cfg_.playerSize / 2;
-        if (lvy_ < 0) lvy_ = 0;
-        p_.onGround = true;
-    }
-    if (!resolveSolids(prev)) return;
-    if (!p_.onGround) rot_ += cfg_.rotateDegPerFrame * h;
-    else rot_ = 90.0 * std::round(rot_ / 90.0);
-}
-
-void Simulation::shipMove(double h) {
-    const double jdt = h * cfg_.speed;
-    lvy_ += (holding_ ? cfg_.shipAccelUp : -cfg_.shipAccelDown) * jdt;
-    lvy_ = std::max(-cfg_.shipMaxDown, std::min(cfg_.shipMaxUp, lvy_));
-    p_.x += h * cfg_.speed * cfg_.xVel;
-    const double prev = ly_;
-    ly_ += h * cfg_.speed * lvy_;
-
-    const double half = cfg_.playerSize / 2;
-    if (ly_ - half < 0) { ly_ = half; if (lvy_ < 0) lvy_ = 0; }
-    if (ly_ + half > cfg_.planeHeight) { ly_ = cfg_.planeHeight - half; if (lvy_ > 0) lvy_ = 0; }
-    p_.onGround = false;
-    if (!resolveSolids(prev)) return;
-    rot_ = -std::atan2(lvy_, cfg_.xVel) * 180.0 / kPi;
+    if (p_.mode == PlayMode::Ship) queuedHold_ = false;
 }
 
 void Simulation::substep(double h) {
-    if (p_.mode == PlayMode::Cube) cubeMove(h); else shipMove(h);
+    const double dtSlow = h * 0.9;
+    updateJump(dtSlow);
+    ly_ += dtSlow * lvy_;
+    p_.x += h * cfg_.xVel * cfg_.speed;
+    collide();
     if (p_.dead) return;
-    touchTriggers();
-    if (touchesHazard()) { die(); return; }
+
+    if (p_.mode == PlayMode::Cube) {
+        if (!onGround_) rot_ += cfg_.rotateDegPerFrame * h;
+        else rot_ = 90.0 * std::round(rot_ / 90.0);
+    } else {
+        rot_ = -std::atan2(lvy_, cfg_.xVel) * 180.0 / kPi;
+    }
     if (p_.x >= endX_) p_.finished = true;
 }
 
@@ -244,9 +242,8 @@ void Simulation::step(double dtFrames) {
     if (dtFrames <= 0) return;
     const double h = dtFrames / 4.0;
     for (int i = 0; i < 4 && !p_.dead && !p_.finished; ++i) substep(h);
-    pressPending_ = false;
 
-    // world-space view of the local state
+    p_.onGround = onGround_;
     p_.y = p_.mirrored ? cfg_.planeHeight - ly_ : ly_;
     p_.vy = p_.mirrored ? -lvy_ : lvy_;
     p_.rotation = p_.mirrored ? -rot_ : rot_;

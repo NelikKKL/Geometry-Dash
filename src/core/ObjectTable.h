@@ -1,39 +1,39 @@
-// Object id -> behaviour + sprite table for GD 1.x levels (no SDL dependency).
+// Object id -> behaviour, sprite, draw order and hitbox for GD 1.x levels (no SDL dependency).
 //
-// How each entry was established (see README "Object table"):
-//   * ids 1-7 map to square_01..07 in order; 8 = spike_01, 39 = spike_02 (small), 40 = plank_01 (slab)
-//   * ids 10-13 = portal_01..04 (blue/yellow gravity, green cube, pink ship) - by sprite colour and by the order
-//     in which they appear inside the levels; 35 = bump (pad), 36 = ring (orb): Stereo Madness has none of them,
-//     Back on Track has pads, which matches the original game
-//   * ids 18-21 = d_spikes_01..04: they always sit directly above a row of id 9 (black ground thorns).
-//     id 9 is DECORATION: in Base After Base it covers the whole floor of stretches that must be run on
-// Ids marked "unmapped" are decoration that occurs in the data but could not be matched to a sprite with
-// confidence; they are skipped by the renderer (and never collide).
+// Source of truth: the OpenGD fork (Content/Custom/object.json for types / sprites / z-order and Source/LongData.cpp for
+// hitboxes). Hitboxes are {w, h, offsetX, offsetY} in GD units relative to the object centre, before flip/rotation.
+//   * solid blocks: 1,2,3,4,6,7 (30x30) and 40 (30x14 slab); id 5 is DECORATION (the black fill block)
+//   * hazards: 8 spike (6x12), 39 small spike (6x5.6), 9 ground thorns (9x10.8)
+//   * decoration (no collision): 5, 15-17 (rods), 18-21 (white thorn tops), 41 (chain)
+//   * portals 10 (gravity down) 11 (gravity up) 12 (cube) 13 (ship), pad 35, ring 36, colour triggers 29/30
+//   * 22-28, 32, 33 are invisible fade/trail triggers: ignored
 #pragma once
 #include <cstdint>
 
 namespace ogd {
 
 enum class ObjKind : uint8_t {
-    Unmapped,      // known to exist, not drawn, no collision
+    Ignored,       // invisible trigger or unknown: not drawn, no collision
     Deco,          // drawn only
     Solid,         // blocks and slabs
-    Hazard,        // spikes, pits: touching = death
+    Hazard,        // spikes, thorns: touching = death
     PortalCube, PortalShip, PortalGravityDown, PortalGravityUp,
     Pad,           // yellow jump pad
-    Orb,           // yellow jump orb (needs a tap while overlapping)
+    Orb,           // yellow jump ring (needs a tap)
     TriggerBG, TriggerGround,
 };
 
-// Objects with z >= kObjZFront are drawn in front of the player (portal fronts, pads, orbs).
-constexpr int kObjZFront = 6;
+// Draw order = layer * 100 + z-order (same keys as the original). The player is drawn at kObjZPlayer: everything
+// above it (portal fronts) is drawn after the player.
+constexpr int kObjZPlayer = 506;
 
 struct ObjInfo {
     int id;
     ObjKind kind;
     const char* sprite;      // sprite frame name, nullptr = not drawn
     const char* spriteBack;  // drawn behind the player (portals), may be nullptr
-    int z;                   // draw order, low first
+    int z;                   // layer * 100 + z-order
+    bool tintMain;           // tinted with the player's main colour (detail objects)
     // hitbox in GD units, relative to the object centre, BEFORE flip/rotation
     float hitW, hitH, hitOffX, hitOffY;
 };

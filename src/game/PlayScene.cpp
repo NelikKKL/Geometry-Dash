@@ -68,7 +68,7 @@ public:
                 if (r.warningCount) SDL_Log("level %d: %zu parse warnings", index_, r.warningCount);
                 level_ = std::move(r.level);
                 SimConfig cfg;
-                cfg.startX = g_debugStartX;
+                if (g_debugStartX != 0.0) cfg.startX = g_debugStartX;
                 cfg.startAsShip = g_debugStartShip;
                 sim_ = std::make_unique<Simulation>(level_, cfg);
             } else {
@@ -307,7 +307,7 @@ private:
         for (size_t i : visible_) {
             const LevelObject& o = level_.objects[i];
             const ObjInfo* info = objectInfo(o.id);
-            if ((info->z < kObjZFront) == behind) drawObject(o, info->sprite);
+            if ((info->z < kObjZPlayer) == behind) drawObject(o, info->sprite);
         }
     }
 
@@ -326,10 +326,11 @@ private:
         } else {
             const float rad = (float)p.rotation * 3.14159265f / 180.f;
             const float off = 8.f * flip;                     // icon sits on top of the ship, rotated with it
-            const float ix = x + off * std::sin(rad), iy = y + off * std::cos(rad);
+            const float lift = 16.f * flip;                   // the ship centre is 3 units above the floor: raise the artwork
+            const float ix = x + off * std::sin(rad), iy = y + lift + off * std::cos(rad);
             E().drawSprite(E().sprite(b), ix, iy, 0.6f, 0.6f * flip, (float)p.rotation, sec_);
             E().drawSprite(E().sprite(a), ix, iy, 0.6f, 0.6f * flip, (float)p.rotation, main_);
-            E().drawSprite(E().sprite("ship_01_001.png"), x, y, 1.f, flip, (float)p.rotation, main_);
+            E().drawSprite(E().sprite("ship_01_001.png"), x, y + lift, 1.f, flip, (float)p.rotation, main_);
         }
     }
 

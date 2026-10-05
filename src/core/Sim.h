@@ -1,9 +1,8 @@
-// Gameplay simulation (no SDL): cube + ship physics, solid/hazard collisions, portals, pads, orbs.
+// Gameplay simulation (no SDL): cube + ship physics, solid/hazard collisions, portals, pads, rings.
+// A port of the OpenGD fork's PlayerObject / PlayLayer::checkCollisions logic (see README "Physics source").
 // All coordinates are GD units (block = 30, floor top y = 0, player centre y = 15 when standing on the floor).
 //
 // Gravity-up sections are simulated in a mirrored "local" space (y -> 300 - y), so every rule is written once.
-// Physics constants for the cube come from the original OpenGD code; hitbox sizes, ship physics and
-// pad/orb strengths are approximations tuned so that the official levels can be completed (see tests/sim_bot).
 #pragma once
 #include <cstdint>
 #include <memory>
@@ -17,36 +16,34 @@ namespace ogd {
 enum class PlayMode : uint8_t { Cube, Ship };
 
 struct SimConfig {
-    double xVel = 5.770002;        // units per frame * speed
+    double xVel = 5.770002;        // per frame, times speed
     double speed = 0.9;
     double gravity = 0.958199;
     double jump = 11.180032;
     double maxFall = 15.0;
-    double rotateDegPerFrame = (180.0 / 0.43333) / 60.0;
+    double rotateDegPerFrame = 180.0 / 0.41 / 60.0;   // RotateBy(0.41 s, 180) while airborne
 
-    // Ship: 0.257 corresponds to the documented ship gravity of 25 blocks/s^2 (GeometryPhysics project); thrust
-    // while holding is assumed equal. A speed cap equal to xVel means the steepest climb is exactly 45 degrees.
-    double shipAccelUp = 0.257;
-    double shipAccelDown = 0.257;
-    double shipMaxUp = 5.770002;
-    double shipMaxDown = 5.770002;
+    // Ship (from PlayerObject::updateJump). shipScale multiplies the acceleration (tuning knob, 1 = original).
+    double shipScale = 1.0;
+    double shipUpLimit = 8.0;
+    double shipDownLimit = 6.4;
 
-    double padBoost = 16.0;
-    double orbBoost = 11.18;
+    double padBoost = 16.0;        // yellow pad: propellPlayer(1) -> 16
+    double ringBoost = 11.180032;  // yellow ring: the jump height
 
     double planeHeight = 300.0;    // distance floor <-> ceiling (gravity-up mirror plane)
-    double playerSize = 30.0;
-    double hazardBox = 12.0;       // player box used against hazards (smaller than the body)
-    double solidInset = 1.5;       // body shrinks by this on every side when tested against blocks (gap tolerance)
-    double landSlack = 5.0;        // how far below a block's top edge the cube may be and still land on it
-    double endPadding = 300.0;     // level ends this far beyond the last object
-    double startX = 0.0;
+    double playerSize = 30.0;      // outer box, used for landing, hazards, portals, pads, rings
+    double innerSize = 7.5;        // inner box: touching a block with it = death
+    double cubeLandMod = 10.0;     // a falling cube lands if its centre is >= block top + mod (i.e. bottom >= top - 5)
+    double shipLandMod = 6.0;
+    double shipFloor = 3.0;        // ship centre may not go below this (cube: 15)
+    double startX = -20.0;
     bool startAsShip = false;      // testing / debugging only
 };
 
 struct SimPlayer {
     double x = 0, y = 15;          // world, centre
-    double vy = 0;                 // world, units/frame*0.9 (positive = up)
+    double vy = 0;                 // world, internal units (positive = up)
     double rotation = 0;           // degrees clockwise, as drawn
     PlayMode mode = PlayMode::Cube;
     bool mirrored = false;         // gravity points up
@@ -60,13 +57,13 @@ public:
     explicit Simulation(const Level& level, const SimConfig& cfg = SimConfig());
 
     void reset();
-    void setHolding(bool h);       // true = finger/space down; a false->true edge also triggers orbs
+    void setHolding(bool h);       // true = finger/space down
     void step(double dtFrames);    // dtFrames: elapsed time in 60 fps frames (clamped to 2)
 
     const SimPlayer& player() const { return p_; }
     bool holding() const { return holding_; }
     double endX() const { return endX_; }
-    double progress() const;       // 0..1
+    double progress() const;       // 0..1 (x / x of the last object, like the original percentage)
     const Level& level() const { return *level_; }
     const SimConfig& config() const { return cfg_; }
 
@@ -76,17 +73,17 @@ public:
 
 private:
     void substep(double h);
-    void cubeMove(double h);
-    void shipMove(double h);
-    bool resolveSolids(double prevLocalY);
-    bool touchesHazard() const;
-    void touchTriggers();
-    bool supported() const;
-    Box localBox(const Box& b) const;
-    Box bodyBox() const;           // local space
-    Box hazardBox() const;         // local space
+    void updateJump(double dtSlow);
+    void collide();
+    void collideSolid(const Box& s);
+    void hitGround() { lvy_ = 0; onGround_ = true; queuedHold_ = false; }
+    void setMode(PlayMode m);
     void flipGravity(bool up);
+    Box localBox(const Box& b) const;
+    Box outerBox() const;
+    Box innerBox() const;
     void die() { p_.dead = true; }
+    bool falling() const { return lvy_ < cfg_.gravity; }
 
     const Level* level_;
     SimConfig cfg_;
@@ -97,7 +94,9 @@ private:
     SimPlayer p_;
     double ly_ = 15;               // local y (mirrored when gravity is up)
     double lvy_ = 0;               // local vy
-    bool holding_ = false, pressPending_ = false;
+    bool onGround_ = true, rising_ = false;
+    bool holding_ = false, queuedHold_ = false;
+    bool touchedRing_ = false;
     double rot_ = 0;
 };
 
