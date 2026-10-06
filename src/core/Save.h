@@ -10,6 +10,8 @@ struct SaveData {
     int mainColor = 0;
     int secondaryColor = 3;
     std::string username = "Player";
+    long long totalJumps = 0;     // shown on the Stats board
+    long long totalAttempts = 0;
     std::array<int, 16> best{};  // best normal-mode progress per level, percent 0..100
 
     int bestOf(int level) const { return (level >= 0 && level < (int)best.size()) ? best[level] : 0; }

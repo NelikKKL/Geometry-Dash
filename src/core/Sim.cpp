@@ -64,6 +64,7 @@ void Simulation::reset() {
     onGround_ = true;
     rising_ = false;
     holding_ = queuedHold_ = touchedRing_ = false;
+    jumps_ = 0;
     used_.assign(level_->objects.size(), 0);
 }
 
@@ -124,6 +125,7 @@ void Simulation::updateJump(double dt) {
         rising_ = true;
         onGround_ = false;
         lvy_ = cfg_.jump;
+        ++jumps_;
         if (!touchedRing_) queuedHold_ = false;
     } else if (rising_) {
         lvy_ -= g * dt;
@@ -210,6 +212,7 @@ void Simulation::collide() {
                     queuedHold_ = false;
                     onGround_ = false;
                     lvy_ = cfg_.ringBoost;
+                    ++jumps_;
                 }
             }
             break;

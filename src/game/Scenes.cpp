@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <vector>
 
+#include "game/Boards.h"
 #include "game/Popup.h"
 #include "game/Ui.h"
 #include "game/World.h"
@@ -101,11 +102,13 @@ public:
         float bc = kW / 2.f - 30 - btotal / 2;
         for (int i = 0; i < 3; ++i) {
             std::string t = bt[i];
-            buttons_.emplace_back(bn[i], bc + bw[i] / 2, 100.f, 1.f, [this, t] { alert(t, "Not implemented yet."); });
+            std::function<void()> cb = [this, t] { alert(t, "Not implemented yet."); };
+            if (i == 2) cb = [this] { board_ = makeStatsBoard(); };
+            buttons_.emplace_back(bn[i], bc + bw[i] / 2, 100.f, 1.f, cb);
             bc += bw[i] + 10;
         }
         buttons_.emplace_back("robtoplogo_small.png", 170.f, 90.f, 0.8f * 1.13f, [] { SDL_OpenURL("http://www.robtopgames.com"); });
-        buttons_.emplace_back("GJ_moreGamesBtn_001.png", kW - 156.f, 130.f, 0.9f * 1.13f, [this] { alert("More games", "Coming soon."); });
+        buttons_.emplace_back("GJ_moreGamesBtn_001.png", kW - 156.f, 130.f, 0.9f * 1.13f, [this] { board_ = makeMoreGamesBoard(); });
     }
 
     void update(float dt) override {
@@ -114,7 +117,12 @@ public:
             if (popup_->closed) popup_.reset();
             return;
         }
-        for (auto& b : buttons_) b.update(dt);
+        if (board_) {
+            board_->update(dt);
+            if (board_->closed) board_.reset();
+        } else {
+            for (auto& b : buttons_) b.update(dt);
+        }
 
         scroll_ += 623.f * dt;
         bgScroll_ += 62.f * dt;
@@ -134,17 +142,23 @@ public:
         E().drawSprite(E().sprite("GJ_logo_001.png"), kW / 2.f, kH - 110.f);
         for (auto& d : deco_) E().drawSprite(E().sprite(d.spr), d.x, d.y, d.s, d.s);
         for (auto& b : buttons_) b.draw();
+        if (board_) board_->draw();
         if (popup_) popup_->draw();
     }
 
     void onDown(float x, float y) override {
         if (popup_) { popup_->onDown(x, y); return; }
+        if (board_) { board_->onDown(x, y); return; }
         for (auto& b : buttons_) if (b.onDown(x, y)) break;
     }
     void onUp(float x, float y) override {
         if (popup_) { popup_->onUp(x, y); return; }
+        if (board_) { board_->onUp(x, y); return; }
         for (auto& b : buttons_) b.onUp(x, y);
     }
+    void onMove(float x, float y) override { if (board_) board_->onMove(x, y); }
+    void onWheel(float dy) override { if (board_) board_->onWheel(dy); }
+    void onKey(SDL_Keycode k, bool down) override { if (board_) board_->onKey(k, down); }
 
 private:
     struct Deco { std::string spr; float x, y, s; };
@@ -162,6 +176,7 @@ private:
     std::vector<Button> buttons_;
     std::vector<Deco> deco_;
     std::unique_ptr<Popup> popup_;
+    std::unique_ptr<Board> board_;
     PlayerState player_;
     int cube_ = 1;
     Color main_, sec_;

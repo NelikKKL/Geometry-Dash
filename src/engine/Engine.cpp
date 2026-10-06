@@ -244,6 +244,13 @@ void Engine::clear(Color c) {
     SDL_RenderClear(ren);
 }
 
+void Engine::setClip(float x, float y, float w, float h) {
+    SDL_Rect r{(int)std::floor(x), (int)std::floor(kH - y - h), (int)std::ceil(w), (int)std::ceil(h)};
+    SDL_RenderSetClipRect(ren, &r);
+}
+
+void Engine::clearClip() { SDL_RenderSetClipRect(ren, nullptr); }
+
 void Engine::fillRect(float x, float y, float w, float h, Color c, Uint8 a) {
     SDL_SetRenderDrawColor(ren, c.r, c.g, c.b, a);
     SDL_FRect r{x, kH - y - h, w, h};

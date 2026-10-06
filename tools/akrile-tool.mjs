@@ -5,7 +5,7 @@
 //   node tools/akrile-tool.mjs unpack <bundle.akrile> [-o Resources]
 //   node tools/akrile-tool.mjs list   <bundle.akrile>
 //
-// --lean   drops what the game does not use yet: SD twins of existing -hd files, promo art, fps images
+// --lean   drops what the game does not use yet: SD twins of existing -hd files, fps images
 //          and all level music except menuLoop.mp3 (add --keep-music to keep the music).
 // Official levels of GD 1.x are not files: they are plain-text strings inside lib/*/libgame.so. When packing an APK
 // they are extracted as level_<track>.txt (level_extra_<n>.txt if the level has no header); --no-levels skips this.
@@ -131,7 +131,7 @@ function applyLean(files, keepMusic) {
     const hd = n.replace(/(\.[^.]+)$/, '-hd$1');
     if (!/-hd\./.test(n) && names.has(hd)) return false;         // SD twin of an -hd file
     if (/-ipadhd\./.test(n)) return false;
-    if (/^promo_|^fps_images/.test(n)) return false;
+    if (/^fps_images/.test(n)) return false;
     if (!keepMusic && /\.mp3$/i.test(n) && n !== 'menuLoop.mp3') return false;
     return true;
   });

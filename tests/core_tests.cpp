@@ -151,7 +151,9 @@ static void testSave() {
     ogd::SaveData bs; CHECK(bs.recordBest(2, 40) && !bs.recordBest(2, 30) && bs.recordBest(2, 100) && bs.bestOf(2) == 100);
     CHECK(!bs.recordBest(-1, 5) && !bs.recordBest(99, 5) && bs.bestOf(99) == 0);
     bs.recordBest(0, 7); CHECK(bs.save(path));
+    bs.totalJumps = 1234567890123LL; bs.totalAttempts = 42; CHECK(bs.save(path));
     ogd::SaveData bl; CHECK(bl.load(path) && bl.bestOf(2) == 100 && bl.bestOf(0) == 7 && bl.bestOf(1) == 0);
+    CHECK(bl.totalJumps == 1234567890123LL && bl.totalAttempts == 42);
     ogd::SaveData c;
     CHECK(!c.load("does_not_exist.json") && c.cube == 1);
     // out-of-range cube is clamped; corrupt file keeps defaults

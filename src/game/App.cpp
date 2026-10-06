@@ -35,6 +35,16 @@ void App::handleEvents() {
             else scene_->onUp(lx, gy);
             break;
         }
+        case SDL_MOUSEMOTION: {
+            if (!(e.motion.state & SDL_BUTTON_LMASK) || phase_ != Idle || !scene_) break;
+            float lx = 0, ly = 0;
+            SDL_RenderWindowToLogical(E().ren, e.motion.x, e.motion.y, &lx, &ly);
+            scene_->onMove(lx, kH - ly);
+            break;
+        }
+        case SDL_MOUSEWHEEL:
+            if (phase_ == Idle && scene_) scene_->onWheel((float)e.wheel.y);
+            break;
         case SDL_KEYDOWN:
         case SDL_KEYUP:
             if (e.key.repeat || !scene_) break;

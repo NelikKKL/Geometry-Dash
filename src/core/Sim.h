@@ -63,6 +63,7 @@ public:
     const SimPlayer& player() const { return p_; }
     bool holding() const { return holding_; }
     double endX() const { return endX_; }
+    long long jumpCount() const { return jumps_; }   // cube jumps + ring jumps since reset (Stats board)
     double progress() const;       // 0..1 (x / x of the last object, like the original percentage)
     const Level& level() const { return *level_; }
     const SimConfig& config() const { return cfg_; }
@@ -98,6 +99,7 @@ private:
     bool holding_ = false, queuedHold_ = false;
     bool touchedRing_ = false;
     double rot_ = 0;
+    long long jumps_ = 0;
 };
 
 } // namespace ogd

@@ -8,7 +8,7 @@
 typedef uint8_t Uint8; typedef uint32_t Uint32; typedef uint64_t Uint64; typedef int32_t Sint32;
 struct SDL_Window;
 struct SDL_Texture { int w = 0, h = 0; std::vector<uint8_t> rgba; uint8_t cr = 255, cg = 255, cb = 255, ca = 255; };
-struct SDL_Renderer { int w = 1280, h = 720; std::vector<uint8_t> fb; uint8_t r = 0, g = 0, b = 0, a = 255; };
+struct SDL_Renderer { int w = 1280, h = 720; std::vector<uint8_t> fb; uint8_t r = 0, g = 0, b = 0, a = 255; bool clip = false; int cx = 0, cy = 0, cw = 0, ch = 0; };
 struct SDL_Rect { int x, y, w, h; };
 struct SDL_FRect { float x, y, w, h; };
 typedef enum { SDL_FLIP_NONE = 0, SDL_FLIP_HORIZONTAL = 1, SDL_FLIP_VERTICAL = 2 } SDL_RendererFlip;
@@ -18,9 +18,12 @@ struct SDL_Keysym { SDL_Keycode sym; };
 struct SDL_KeyboardEvent { Uint32 type; Uint8 repeat; SDL_Keysym keysym; };
 struct SDL_MouseButtonEvent { Uint32 type; Uint8 button; Sint32 x, y; };
 struct SDL_TextInputEvent { Uint32 type; char text[32]; };
-union SDL_Event { Uint32 type; SDL_KeyboardEvent key; SDL_MouseButtonEvent button; SDL_TextInputEvent text; };
-enum { SDL_QUIT = 0x100, SDL_KEYDOWN = 0x300, SDL_KEYUP, SDL_TEXTINPUT = 0x303, SDL_MOUSEBUTTONDOWN = 0x401, SDL_MOUSEBUTTONUP };
+struct SDL_MouseMotionEvent { Uint32 type; Uint32 state; Sint32 x, y; };
+struct SDL_MouseWheelEvent { Uint32 type; Sint32 x, y; };
+union SDL_Event { Uint32 type; SDL_KeyboardEvent key; SDL_MouseButtonEvent button; SDL_TextInputEvent text; SDL_MouseMotionEvent motion; SDL_MouseWheelEvent wheel; };
+enum { SDL_QUIT = 0x100, SDL_KEYDOWN = 0x300, SDL_KEYUP, SDL_TEXTINPUT = 0x303, SDL_MOUSEMOTION = 0x400, SDL_MOUSEBUTTONDOWN = 0x401, SDL_MOUSEBUTTONUP, SDL_MOUSEWHEEL = 0x403 };
 #define SDL_BUTTON_LEFT 1
+#define SDL_BUTTON_LMASK 1
 #define SDL_INIT_VIDEO 1
 #define SDL_INIT_AUDIO 2
 #define SDL_INIT_EVENTS 4
@@ -47,6 +50,7 @@ int SDL_RenderCopyExF(SDL_Renderer*, SDL_Texture*, const SDL_Rect*, const SDL_FR
 int SDL_RenderCopyF(SDL_Renderer*, SDL_Texture*, const SDL_Rect*, const SDL_FRect*);
 void SDL_RenderWindowToLogical(SDL_Renderer*, int, int, float*, float*);
 int SDL_PollEvent(SDL_Event*); Uint64 SDL_GetPerformanceCounter(); Uint64 SDL_GetPerformanceFrequency();
+int SDL_RenderSetClipRect(SDL_Renderer*, const SDL_Rect*);
 Uint32 SDL_GetTicks(); int SDL_OpenURL(const char*);
 void SDL_StartTextInput(); void SDL_StopTextInput();
 

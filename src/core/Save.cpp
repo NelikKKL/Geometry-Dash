@@ -16,6 +16,8 @@ bool SaveData::load(const std::string& path) {
         mainColor = j.value("player-main-color", mainColor);
         secondaryColor = j.value("player-secondary-color", secondaryColor);
         username = j.value("player-username", username);
+        totalJumps = std::max(0LL, j.value("stat-jumps", 0LL));
+        totalAttempts = std::max(0LL, j.value("stat-attempts", 0LL));
         if (j.contains("level-best") && j["level-best"].is_array()) {
             size_t i = 0;
             for (auto& v : j["level-best"]) {
@@ -46,6 +48,8 @@ bool SaveData::save(const std::string& path) const {
         {"player-secondary-color", secondaryColor},
         {"player-username", username},
         {"level-best", best},
+        {"stat-jumps", totalJumps},
+        {"stat-attempts", totalAttempts},
     };
     std::ofstream f(path);
     if (!f) return false;

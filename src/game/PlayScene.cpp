@@ -87,6 +87,7 @@ public:
             }
             resetRun();
             startMusic();
+            countAttempt();
         }
     }
 
@@ -98,6 +99,7 @@ public:
         switch (state_) {
         case State::Playing: {
             sim_->step(dt * 60.0);
+            countJumps();
             applyTriggers();
             bg_.update(dt);
             ground_.update(dt);
@@ -196,6 +198,7 @@ private:
         particles_.clear();
         camY_ = 0.f;
         camX_ = -kPlayerScreenX;
+        lastJumps_ = 0;
         if (held_) sim_->setHolding(true);
     }
 
@@ -203,12 +206,22 @@ private:
         ++attempts_;
         resetRun();
         startMusic();
+        countAttempt();
+    }
+
+    // Stats board counters (not counted for debug starts)
+    void countAttempt() { if (g_debugStartX == 0.0) ++E().save.totalAttempts; }
+    void countJumps() {
+        const long long j = sim_->jumpCount();
+        if (g_debugStartX == 0.0 && j > lastJumps_) E().save.totalJumps += j - lastJumps_;
+        lastJumps_ = j;
     }
 
     void leave() {
         if (leaving_) return;
         leaving_ = true;
         E().stopMusic();
+        E().persist();
         const int page = index_;
         app().goTo([page] { return makeLevelSelectScene(page); });
     }
@@ -243,7 +256,7 @@ private:
         E().stopMusic();
         E().playSfx("explode_11.ogg");
         const int pct = (int)(sim_->progress() * 100.0);
-        if (g_debugStartX == 0.0 && E().save.recordBest(index_, pct)) E().persist();
+        if (g_debugStartX == 0.0) { E().save.recordBest(index_, pct); E().persist(); }
         // burst of squares
         const float cx = (float)p.x * kPx, cy = kFloorPx + (float)p.y * kPx;
         for (int i = 0; i < 30; ++i) {
@@ -263,7 +276,7 @@ private:
         state_ = State::Complete;
         E().stopMusic();
         E().playSfx("endStart_02.ogg");
-        if (g_debugStartX == 0.0 && E().save.recordBest(index_, 100)) E().persist();
+        if (g_debugStartX == 0.0) { E().save.recordBest(index_, 100); E().persist(); }
     }
 
     void updateParticles(float dt) {
@@ -357,6 +370,7 @@ private:
     std::vector<Particle> particles_;
     float camX_ = -kPlayerScreenX, camY_ = 0.f, timer_ = 0.f;
     int attempts_ = 1;
+    long long lastJumps_ = 0;
     bool held_ = false, leaving_ = false;
 };
 

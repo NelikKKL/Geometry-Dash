@@ -70,6 +70,9 @@ public:
                   Color col = {}, Uint8 alpha = 255);
     void fillRect(float x, float y, float w, float h, Color c, Uint8 alpha); // x,y = bottom-left
     void drawPanel(const Sprite& s, float cx, float cy, float w, float h, Color col = {}, Uint8 alpha = 255);
+    // Restrict drawing to a rectangle (x,y = bottom-left, y-up). clearClip() removes it.
+    void setClip(float x, float y, float w, float h);
+    void clearClip();
     void present() { SDL_RenderPresent(ren); }
 
     void persist(); // write save file (+ flush IndexedDB on web)

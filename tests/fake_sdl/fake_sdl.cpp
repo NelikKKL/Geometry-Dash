@@ -33,6 +33,11 @@ int SDL_SetRenderDrawBlendMode(SDL_Renderer*, int) { return 0; }
 int SDL_SetRenderDrawColor(SDL_Renderer* r, Uint8 R, Uint8 G, Uint8 B, Uint8 A) { r->r = R; r->g = G; r->b = B; r->a = A; return 0; }
 int SDL_RenderClear(SDL_Renderer* r) { for (size_t i = 0; i < r->fb.size(); i += 4) { r->fb[i] = r->r; r->fb[i + 1] = r->g; r->fb[i + 2] = r->b; r->fb[i + 3] = 255; } return 0; }
 void SDL_RenderPresent(SDL_Renderer*) {}
+int SDL_RenderSetClipRect(SDL_Renderer* r, const SDL_Rect* c) {
+    r->clip = c != nullptr;
+    if (c) { r->cx = c->x; r->cy = c->y; r->cw = c->w; r->ch = c->h; }
+    return 0;
+}
 int SDL_SetTextureBlendMode(SDL_Texture*, int) { return 0; }
 int SDL_SetTextureColorMod(SDL_Texture* t, Uint8 r, Uint8 g, Uint8 b) { t->cr = r; t->cg = g; t->cb = b; return 0; }
 int SDL_SetTextureAlphaMod(SDL_Texture* t, Uint8 a) { t->ca = a; return 0; }
@@ -60,6 +65,7 @@ bool fake_dump_ppm(SDL_Renderer* r, const char* path) {
 // ------------------------------------------------------------------ drawing
 static inline void blendPixel(SDL_Renderer* r, int x, int y, float R, float G, float B, float A) {
     if (x < 0 || y < 0 || x >= r->w || y >= r->h || A <= 0) return;
+    if (r->clip && (x < r->cx || y < r->cy || x >= r->cx + r->cw || y >= r->cy + r->ch)) return;
     uint8_t* p = &r->fb[((size_t)y * r->w + x) * 4];
     p[0] = (uint8_t)(R * A + p[0] * (1 - A) + 0.5f);
     p[1] = (uint8_t)(G * A + p[1] * (1 - A) + 0.5f);

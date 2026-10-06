@@ -16,8 +16,17 @@ Runs natively (Linux/Windows/macOS) and in the browser via Emscripten/WebAssembl
 | Level parser (plain text and base64+gzip/zlib) | done, 7 official levels load with 0 warnings |
 | Gameplay: cube, ship, gravity portals, pads, rings, blocks/slabs, spikes, colour triggers (physics ported from the OpenGD fork) | done (see "Physics source and accuracy") |
 | Death burst + restart, level complete screen, progress bar, music, sound effects | done |
-| Creator, options, stats, achievements, practice mode | placeholder popups / TODO |
+| Stats board (jumps, attempts, completed levels) and More Games board (scrollable banners from the APK) | done |
+| Creator, options, achievements, practice mode | placeholder popups / TODO |
 | Invisible fade/trail triggers (ids 22-28, 32, 33) | ignored |
+
+## More Games links
+
+The banners (`promo_boom`, `promo_mu`, `promo_mm`) come from the APK. The original fetched the list and the store links from
+`robtopgames.com/checkMoreGamesAndroid.php` / `robtopgames.com/download/<key><platform>`; none of Boomlings, Boomlings
+MatchUp or Memory Mastermind is listed on the official site any more, so no verified store link exists. Every banner
+therefore opens `https://robtopgames.com`. To point a banner somewhere else edit the `kGames` table at the top of the
+More Games section in `src/game/Boards.cpp`. (The official Geometry Dash store links are listed on that site.)
 
 ## Physics source and accuracy
 

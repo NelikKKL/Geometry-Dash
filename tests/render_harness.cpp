@@ -47,6 +47,8 @@ int main(int argc, char** argv) {
         else if (cmd == "down") { int x, y; c >> x >> y; mouse(true, x, y); frames(1.0 / 60); }
         else if (cmd == "up") { int x, y; c >> x >> y; mouse(false, x, y); frames(1.0 / 60); }
         else if (cmd == "key") { std::string k, d; c >> k >> d; SDL_Event e{}; e.key.type = d == "down" ? SDL_KEYDOWN : SDL_KEYUP; e.key.keysym.sym = keyOf(k); fake_push_event(e); frames(1.0 / 60); }
+        else if (cmd == "move") { int x, y; c >> x >> y; SDL_Event e{}; e.motion.type = SDL_MOUSEMOTION; e.motion.state = SDL_BUTTON_LMASK; e.motion.x = x; e.motion.y = y; fake_push_event(e); frames(1.0 / 60); }
+        else if (cmd == "wheel") { int n; c >> n; SDL_Event e{}; e.wheel.type = SDL_MOUSEWHEEL; e.wheel.y = n; fake_push_event(e); frames(1.0 / 60); }
         else if (cmd == "text") { std::string t; std::getline(c >> std::ws, t); SDL_Event e{}; e.text.type = SDL_TEXTINPUT; std::snprintf(e.text.text, sizeof e.text.text, "%s", t.c_str()); fake_push_event(e); frames(1.0 / 60); }
         else if (cmd == "ship") { g_debugStartShip = true; }
         else if (cmd == "startx") { double x; c >> x; g_debugStartX = x; }

@@ -272,6 +272,20 @@ static void testPadRing() {
     CHECK(hh < peak + 8);
 }
 
+static void testJumpCount() {
+    Level L = mk("1,1,2,100000,3,-300");
+    Simulation sim(L);
+    CHECK(sim.jumpCount() == 0);
+    run(sim, 200, [](int f) { return f % 40 < 3; });          // a tap every 40 frames: one jump per tap
+    CHECK(sim.jumpCount() >= 4 && sim.jumpCount() <= 6);
+    sim.reset();
+    CHECK(sim.jumpCount() == 0);
+    Level R = mkFar("1,36,2,600,3,60");                       // a ring jump counts as a jump too
+    Simulation s(R);
+    for (int f = 0; f < 200 && !s.player().dead; ++f) { s.setHolding((f >= 90 && f < 93) || (f >= 105 && f < 130)); s.step(1.0); }
+    CHECK(s.jumpCount() >= 1);
+}
+
 static void testCopyDeterminism() {
     Level L = mkFar("1,8,2,600,3,15;1,1,2,900,3,15;1,13,2,1500,3,15");
     Simulation a(L);
@@ -289,7 +303,7 @@ static void testCopyDeterminism() {
 
 int main() {
     testFlat(); testJumpShape(); testHazards(); testBlocks(); testOneBlockWindow(); testCoyote(); testShip();
-    testGravityPortal(); testPadRing(); testCopyDeterminism();
+    testGravityPortal(); testPadRing(); testJumpCount(); testCopyDeterminism();
     if (failures) { std::printf("%d check(s) failed\n", failures); return 1; }
     std::printf("all sim tests passed\n");
     return 0;

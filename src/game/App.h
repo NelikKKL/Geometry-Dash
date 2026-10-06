@@ -17,6 +17,8 @@ public:
     virtual void draw() {}
     virtual void onDown(float x, float y) { (void)x; (void)y; }
     virtual void onUp(float x, float y) { (void)x; (void)y; }
+    virtual void onMove(float x, float y) { (void)x; (void)y; }     // mouse / finger moves while pressed (y-up)
+    virtual void onWheel(float dy) { (void)dy; }                      // mouse wheel, positive = away from the user
     virtual void onKey(SDL_Keycode k, bool down) { (void)k; (void)down; }
     virtual void onText(const std::string& utf8) { (void)utf8; }   // while SDL text input is active
 };
