@@ -56,6 +56,10 @@ public:
     Mix_Music* music(const std::string& name);
     void playMusic(const std::string& name, int loops);   // restarts from the beginning; no-op if audio is off
     void stopMusic();
+    void pauseMusic();
+    void resumeMusic();
+    void setMusicOn(bool on);   // Options / pause toggle: mutes or unmutes the running track
+    void setFxOn(bool on);
     void playSfx(const std::string& name, int volume = MIX_MAX_VOLUME);
     bool readText(const std::string& name, std::string& out) const;
 

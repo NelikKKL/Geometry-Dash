@@ -11,6 +11,7 @@ class Button {
 public:
     Button(const std::string& spriteName, float x, float y, float baseScale, std::function<void()> cb);
 
+    void setSprite(const std::string& spriteName) { spr_ = E().sprite(spriteName); }
     void setLabel(const std::string& text, float scale = 0.8f) { label_ = text; labelScale_ = scale; }
     void update(float dt);
     void draw();

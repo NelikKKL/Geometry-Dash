@@ -212,6 +212,8 @@ Mix_Music* Engine::music(const std::string& name) {
 
 void Engine::playMusic(const std::string& name, int loops) {
     if (!audioOk) return;
+    // music off = the track still runs, just muted, so switching it back on mid-level is in sync
+    Mix_VolumeMusic(save.musicOn ? MIX_MAX_VOLUME : 0);
     if (Mix_Music* m = music(name)) Mix_PlayMusic(m, loops);
 }
 
@@ -219,8 +221,24 @@ void Engine::stopMusic() {
     if (audioOk) Mix_HaltMusic();
 }
 
-void Engine::playSfx(const std::string& name, int volume) {
+void Engine::pauseMusic() {
+    if (audioOk) Mix_PauseMusic();
+}
+
+void Engine::resumeMusic() {
+    if (audioOk) Mix_ResumeMusic();
+}
+
+void Engine::setMusicOn(bool on) {
+    save.musicOn = on;
     if (!audioOk) return;
+    Mix_VolumeMusic(on ? MIX_MAX_VOLUME : 0);
+}
+
+void Engine::setFxOn(bool on) { save.fxOn = on; }
+
+void Engine::playSfx(const std::string& name, int volume) {
+    if (!audioOk || !save.fxOn) return;
     auto it = sfx_.find(name);
     if (it == sfx_.end()) {
         Mix_Chunk* c = nullptr;

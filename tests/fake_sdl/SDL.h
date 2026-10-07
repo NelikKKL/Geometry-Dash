@@ -13,7 +13,7 @@ struct SDL_Rect { int x, y, w, h; };
 struct SDL_FRect { float x, y, w, h; };
 typedef enum { SDL_FLIP_NONE = 0, SDL_FLIP_HORIZONTAL = 1, SDL_FLIP_VERTICAL = 2 } SDL_RendererFlip;
 typedef int32_t SDL_Keycode;
-enum { SDLK_SPACE = 32, SDLK_UP = 1, SDLK_w = 'w', SDLK_ESCAPE = 27, SDLK_LEFT = 2, SDLK_RIGHT = 3, SDLK_a = 'a', SDLK_d = 'd', SDLK_RETURN = 13, SDLK_BACKSPACE = 8 };
+enum { SDLK_SPACE = 32, SDLK_UP = 1, SDLK_w = 'w', SDLK_ESCAPE = 27, SDLK_LEFT = 2, SDLK_RIGHT = 3, SDLK_a = 'a', SDLK_d = 'd', SDLK_x = 'x', SDLK_z = 'z', SDLK_RETURN = 13, SDLK_BACKSPACE = 8 };
 struct SDL_Keysym { SDL_Keycode sym; };
 struct SDL_KeyboardEvent { Uint32 type; Uint8 repeat; SDL_Keysym keysym; };
 struct SDL_MouseButtonEvent { Uint32 type; Uint8 button; Sint32 x, y; };

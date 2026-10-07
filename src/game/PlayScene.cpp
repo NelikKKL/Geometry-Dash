@@ -9,6 +9,7 @@
 #include "core/ObjectTable.h"
 #include "core/Sim.h"
 #include "game/Levels.h"
+#include "game/PauseLayer.h"
 #include "game/Scenes.h"
 #include "game/Ui.h"
 #include "game/World.h"
@@ -59,6 +60,9 @@ public:
     explicit PlayScene(int index)
         : index_(index),
           back_("GJ_arrow_01_001.png", 50.f, kH - 50.f, 1.f, [this] { leave(); }),
+          pauseBtn_("GJ_pauseBtn_001.png", kW - 50.f, kH - 50.f, 1.f, [this] { openPause(); }),
+          checkBtn_("GJ_checkpointBtn_001.png", kW / 2.f - 80.f, 70.f, 0.9f, [this] { addCheckpoint(); }),
+          removeBtn_("GJ_removeCheckBtn_001.png", kW / 2.f + 80.f, 70.f, 0.9f, [this] { removeCheckpoint(); }),
           replay_("GJ_replayBtn_001.png", 540.f, 300.f, 0.9f, [this] { restart(); }),
           menu_("GJ_menuBtn_001.png", 740.f, 300.f, 0.9f, [this] { leave(); }) {
         std::string txt;
@@ -92,8 +96,16 @@ public:
     }
 
     void update(float dt) override {
+        if (pendingClose_) {                              // pause menu was dismissed by one of its callbacks / Esc
+            pendingClose_ = false;
+            pause_.reset();
+            E().resumeMusic();
+        }
         back_.update(dt);
         if (!sim_) return;
+        if (pause_) { pause_->update(dt); return; }   // the world is frozen while paused
+        pauseBtn_.update(dt);
+        if (practice_) { checkBtn_.update(dt); removeBtn_.update(dt); }
         updateParticles(dt);
 
         switch (state_) {
@@ -147,9 +159,13 @@ public:
             E().fillRect(q.x - camX_ - q.size / 2, q.y - camY_ - q.size / 2, q.size, q.size, q.c, (Uint8)(255 * a));
         }
 
-        drawHud();
-        back_.draw();
+        if (!pause_) drawHud();
+        if (state_ == State::Playing && !pause_) {
+            pauseBtn_.draw();
+            if (practice_) { checkBtn_.draw(); removeBtn_.draw(); }
+        }
 
+        if (pause_) pause_->draw();
         if (state_ == State::Complete) {
             E().fillRect(0, 0, kW, kH, {0, 0, 0}, 110);
             E().drawSprite(E().sprite("GJ_levelComplete_001.png"), kW / 2.f, 540.f);
@@ -160,21 +176,40 @@ public:
     }
 
     void onDown(float x, float y) override {
+        if (pause_) { pause_->onDown(x, y); return; }
+        if (!sim_) { back_.onDown(x, y); return; }
+        if (state_ == State::Playing) {
+            if (pauseBtn_.onDown(x, y)) return;
+            if (practice_ && (checkBtn_.onDown(x, y) || removeBtn_.onDown(x, y))) return;
+        }
         if (state_ == State::Complete) {
             if (replay_.onDown(x, y)) return;
             if (menu_.onDown(x, y)) return;
         }
-        if (back_.onDown(x, y)) return;
         press(true);
     }
     void onUp(float x, float y) override {
+        if (pause_) { pause_->onUp(x, y); return; }
         back_.onUp(x, y);
+        pauseBtn_.onUp(x, y);
+        if (practice_) { checkBtn_.onUp(x, y); removeBtn_.onUp(x, y); }
         if (state_ == State::Complete) { replay_.onUp(x, y); menu_.onUp(x, y); }
         press(false);
     }
     void onKey(SDL_Keycode k, bool down) override {
+        if (pause_) {                                   // Esc closes the pause menu (PauseLayer::keyBackClicked)
+            if (k == SDLK_ESCAPE && down) closePause();
+            return;
+        }
         if (k == SDLK_SPACE || k == SDLK_UP || k == SDLK_w) press(down);
-        else if (k == SDLK_ESCAPE && down) leave();
+        else if (k == SDLK_ESCAPE && down) {
+            if (sim_ && state_ == State::Playing) openPause();
+            else if (!sim_ || state_ == State::Complete) leave();   // during the death animation Esc is ignored
+        }
+        else if (practice_ && state_ == State::Playing && down) {
+            if (k == SDLK_z) addCheckpoint();
+            else if (k == SDLK_x) removeCheckpoint();
+        }
     }
 
 private:
@@ -203,6 +238,74 @@ private:
     }
 
     void restart() {
+        if (practice_ && !checkpoints_.empty()) {      // practice: respawn at the last checkpoint, no new attempt
+            restoreCheckpoint(checkpoints_.back());
+            startMusic();
+            return;
+        }
+        ++attempts_;
+        resetRun();
+        startMusic();
+        countAttempt();
+    }
+
+    // ---- practice mode -------------------------------------------------------
+    struct Checkpoint {
+        Simulation sim;
+        ColorFade bg, ground;
+        size_t nextTrigger;
+        float camX, camY;
+    };
+
+    void addCheckpoint() {
+        if (!sim_ || state_ != State::Playing || sim_->player().dead) return;
+        checkpoints_.push_back({*sim_, bg_, ground_, nextTrigger_, camX_, camY_});
+    }
+    void removeCheckpoint() {
+        if (!checkpoints_.empty()) checkpoints_.pop_back();
+    }
+    void restoreCheckpoint(const Checkpoint& c) {
+        *sim_ = c.sim;
+        bg_ = c.bg; ground_ = c.ground;
+        nextTrigger_ = c.nextTrigger;
+        camX_ = c.camX; camY_ = c.camY;
+        particles_.clear();
+        state_ = State::Playing;
+        lastJumps_ = sim_->jumpCount();
+        sim_->setHolding(held_);
+    }
+
+    // ---- pause -----------------------------------------------------------------
+    void openPause() {
+        if (!sim_ || state_ != State::Playing || pause_) return;
+        held_ = false;
+        sim_->setHolding(false);
+        E().pauseMusic();
+        PauseCallbacks cb;
+        cb.onResume = [this] { closePause(); };
+        cb.onRestart = [this] { closePause(); if (practice_) clearCheckpoints(); restartFresh(); };
+        cb.onQuit = [this] { closePause(); leave(); };
+        cb.onPractice = [this] {                        // PauseLayer::onPracticeMode: switch on, then resume
+            practice_ = true;
+            clearCheckpoints();
+            addCheckpoint();                            // so a death right away does not throw the run back to 0%
+            closePause();
+        };
+        cb.onNormal = [this] {                          // PauseLayer::onNormalMode
+            practice_ = false;
+            clearCheckpoints();
+            closePause();
+            restartFresh();
+        };
+        pause_ = std::make_unique<PauseLayer>(levelMeta(index_).name, E().save.bestOf(index_),
+                                              E().save.practiceBestOf(index_), practice_, std::move(cb));
+    }
+    void closePause() {
+        if (!pause_) return;
+        pendingClose_ = true;                           // freed after the callback returns (we're inside its button)
+    }
+    void clearCheckpoints() { checkpoints_.clear(); }
+    void restartFresh() {
         ++attempts_;
         resetRun();
         startMusic();
@@ -256,7 +359,11 @@ private:
         E().stopMusic();
         E().playSfx("explode_11.ogg");
         const int pct = (int)(sim_->progress() * 100.0);
-        if (g_debugStartX == 0.0) { E().save.recordBest(index_, pct); E().persist(); }
+        if (g_debugStartX == 0.0) {
+            if (practice_) E().save.recordPracticeBest(index_, pct);
+            else E().save.recordBest(index_, pct);
+            E().persist();
+        }
         // burst of squares
         const float cx = (float)p.x * kPx, cy = kFloorPx + (float)p.y * kPx;
         for (int i = 0; i < 30; ++i) {
@@ -276,7 +383,11 @@ private:
         state_ = State::Complete;
         E().stopMusic();
         E().playSfx("endStart_02.ogg");
-        if (g_debugStartX == 0.0) { E().save.recordBest(index_, 100); E().persist(); }
+        if (g_debugStartX == 0.0) {
+            if (practice_) E().save.recordPracticeBest(index_, 100);
+            else E().save.recordBest(index_, 100);
+            E().persist();
+        }
     }
 
     void updateParticles(float dt) {
@@ -361,7 +472,10 @@ private:
     int index_;
     Level level_;
     std::unique_ptr<Simulation> sim_;
-    Button back_, replay_, menu_;
+    Button back_, pauseBtn_, checkBtn_, removeBtn_, replay_, menu_;
+    std::unique_ptr<PauseLayer> pause_;
+    bool pendingClose_ = false, practice_ = false;
+    std::vector<Checkpoint> checkpoints_;
     State state_ = State::Playing;
     std::vector<size_t> triggers_, visible_;
     size_t nextTrigger_ = 0;

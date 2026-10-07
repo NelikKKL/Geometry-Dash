@@ -175,5 +175,5 @@ SDL_Texture* IMG_LoadTexture(SDL_Renderer*, const char* path) {
 int Mix_OpenAudio(int, Uint32, int, int) { g_err = "fake audio"; return -1; }
 void Mix_CloseAudio() {} int Mix_AllocateChannels(int) { return 0; }
 Mix_Music* Mix_LoadMUS(const char*) { return nullptr; } void Mix_FreeMusic(Mix_Music*) {} const char* Mix_GetError() { return g_err.c_str(); }
-int Mix_PlayMusic(Mix_Music*, int) { return 0; } int Mix_VolumeMusic(int) { return 0; } int Mix_HaltMusic() { return 0; } int Mix_PlayingMusic() { return 0; }
+int Mix_PlayMusic(Mix_Music*, int) { return 0; } int Mix_VolumeMusic(int) { return 0; } int Mix_HaltMusic() { return 0; } int Mix_PlayingMusic() { return 0; } void Mix_PauseMusic() {} void Mix_ResumeMusic() {}
 Mix_Chunk* Mix_LoadWAV(const char*) { return nullptr; } void Mix_FreeChunk(Mix_Chunk*) {} int Mix_VolumeChunk(Mix_Chunk*, int) { return 0; } int Mix_PlayChannel(int, Mix_Chunk*, int) { return 0; }

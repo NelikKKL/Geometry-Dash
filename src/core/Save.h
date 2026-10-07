@@ -13,6 +13,11 @@ struct SaveData {
     long long totalJumps = 0;     // shown on the Stats board
     long long totalAttempts = 0;
     std::array<int, 16> best{};  // best normal-mode progress per level, percent 0..100
+    std::array<int, 16> practiceBest{};  // best practice-mode progress per level, percent 0..100
+
+    // Settings (GameManager::toggleMusic / toggleFX in the original)
+    bool musicOn = true;
+    bool fxOn = true;
 
     int bestOf(int level) const { return (level >= 0 && level < (int)best.size()) ? best[level] : 0; }
     bool levelCompleted(int level) const { return bestOf(level) >= 100; }
@@ -25,6 +30,8 @@ struct SaveData {
 
     // Records progress; returns true if it is a new best.
     bool recordBest(int level, int percent);
+    bool recordPracticeBest(int level, int percent);
+    int practiceBestOf(int level) const { return (level >= 0 && level < (int)practiceBest.size()) ? practiceBest[level] : 0; }
 
     bool load(const std::string& path);       // false if missing/corrupt (defaults kept)
     bool save(const std::string& path) const;

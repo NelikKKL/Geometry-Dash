@@ -20,7 +20,7 @@ add_executable(OpenGD
   src/main.cpp
   src/engine/Engine.cpp
   src/game/App.cpp src/game/Ui.cpp src/game/Popup.cpp src/game/World.cpp src/game/Scenes.cpp
-  src/game/LevelSelect.cpp src/game/PlayScene.cpp src/game/Garage.cpp src/game/Boards.cpp)
+  src/game/LevelSelect.cpp src/game/PlayScene.cpp src/game/PauseLayer.cpp src/game/Garage.cpp src/game/Boards.cpp)
 target_link_libraries(OpenGD PRIVATE ogd_core)
 
 if(EMSCRIPTEN)
@@ -69,7 +69,7 @@ if(OGD_BUILD_TESTS AND NOT EMSCRIPTEN)
   add_executable(render_harness
     tests/render_harness.cpp tests/fake_sdl/fake_sdl.cpp src/engine/Engine.cpp
     src/game/App.cpp src/game/Ui.cpp src/game/Popup.cpp src/game/World.cpp src/game/Scenes.cpp
-    src/game/LevelSelect.cpp src/game/PlayScene.cpp src/game/Garage.cpp src/game/Boards.cpp)
+    src/game/LevelSelect.cpp src/game/PlayScene.cpp src/game/PauseLayer.cpp src/game/Garage.cpp src/game/Boards.cpp)
   target_include_directories(render_harness PRIVATE tests/fake_sdl)   # shadows the real SDL headers
   target_link_libraries(render_harness PRIVATE ogd_core)
 

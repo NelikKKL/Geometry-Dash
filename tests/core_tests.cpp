@@ -154,6 +154,11 @@ static void testSave() {
     bs.totalJumps = 1234567890123LL; bs.totalAttempts = 42; CHECK(bs.save(path));
     ogd::SaveData bl; CHECK(bl.load(path) && bl.bestOf(2) == 100 && bl.bestOf(0) == 7 && bl.bestOf(1) == 0);
     CHECK(bl.totalJumps == 1234567890123LL && bl.totalAttempts == 42);
+    // pause-menu data: practice records and the Music / FX switches survive a round trip, defaults are "on"
+    ogd::SaveData po; CHECK(po.musicOn && po.fxOn);
+    CHECK(po.recordPracticeBest(1, 55) && !po.recordPracticeBest(1, 40) && po.practiceBestOf(1) == 55 && !po.recordPracticeBest(99, 5));
+    po.musicOn = false; po.fxOn = false; CHECK(po.save(path));
+    ogd::SaveData pl; CHECK(pl.load(path) && !pl.musicOn && !pl.fxOn && pl.practiceBestOf(1) == 55 && pl.bestOf(1) == 0);
     ogd::SaveData c;
     CHECK(!c.load("does_not_exist.json") && c.cube == 1);
     // out-of-range cube is clamped; corrupt file keeps defaults

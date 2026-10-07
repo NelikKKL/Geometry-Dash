@@ -26,6 +26,16 @@ bool SaveData::load(const std::string& path) {
                 ++i;
             }
         }
+        if (j.contains("level-practice-best") && j["level-practice-best"].is_array()) {
+            size_t i = 0;
+            for (auto& v : j["level-practice-best"]) {
+                if (i >= practiceBest.size()) break;
+                if (v.is_number_integer()) practiceBest[i] = std::max(0, std::min(100, v.get<int>()));
+                ++i;
+            }
+        }
+        musicOn = j.value("opt-music", true);
+        fxOn = j.value("opt-fx", true);
         return true;
     } catch (...) {
         return false;
@@ -41,6 +51,14 @@ bool SaveData::recordBest(int level, int percent) {
     return true;
 }
 
+bool SaveData::recordPracticeBest(int level, int percent) {
+    if (level < 0 || level >= (int)practiceBest.size()) return false;
+    percent = std::max(0, std::min(100, percent));
+    if (percent <= practiceBest[level]) return false;
+    practiceBest[level] = percent;
+    return true;
+}
+
 bool SaveData::save(const std::string& path) const {
     nlohmann::json j = {
         {"player-cube", cube},
@@ -48,6 +66,9 @@ bool SaveData::save(const std::string& path) const {
         {"player-secondary-color", secondaryColor},
         {"player-username", username},
         {"level-best", best},
+        {"level-practice-best", practiceBest},
+        {"opt-music", musicOn},
+        {"opt-fx", fxOn},
         {"stat-jumps", totalJumps},
         {"stat-attempts", totalAttempts},
     };
