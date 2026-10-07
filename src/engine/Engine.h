@@ -54,7 +54,7 @@ public:
     Sprite sprite(const std::string& name);            // sheet frame or standalone image
     Font* font(const std::string& fntName);
     Mix_Music* music(const std::string& name);
-    void playMusic(const std::string& name, int loops);   // restarts from the beginning; no-op if audio is off
+    void playMusic(const std::string& name, int loops, int volume = MIX_MAX_VOLUME);   // restarts from the beginning; no-op if audio is off
     void stopMusic();
     void pauseMusic();
     void resumeMusic();
@@ -85,6 +85,7 @@ public:
     SDL_Renderer* ren = nullptr;
     SaveData save;
     bool audioOk = false;
+    int musicBase_ = MIX_MAX_VOLUME;   // volume of the current track while Music is on
 
 private:
     std::string resolve(const std::string& name, bool* isHd = nullptr) const;

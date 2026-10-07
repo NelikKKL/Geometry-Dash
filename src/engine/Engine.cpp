@@ -210,10 +210,11 @@ Mix_Music* Engine::music(const std::string& name) {
     return m;
 }
 
-void Engine::playMusic(const std::string& name, int loops) {
+void Engine::playMusic(const std::string& name, int loops, int volume) {
     if (!audioOk) return;
     // music off = the track still runs, just muted, so switching it back on mid-level is in sync
-    Mix_VolumeMusic(save.musicOn ? MIX_MAX_VOLUME : 0);
+    musicBase_ = volume;
+    Mix_VolumeMusic(save.musicOn ? musicBase_ : 0);
     if (Mix_Music* m = music(name)) Mix_PlayMusic(m, loops);
 }
 
@@ -232,7 +233,7 @@ void Engine::resumeMusic() {
 void Engine::setMusicOn(bool on) {
     save.musicOn = on;
     if (!audioOk) return;
-    Mix_VolumeMusic(on ? MIX_MAX_VOLUME : 0);
+    Mix_VolumeMusic(on ? musicBase_ : 0);
 }
 
 void Engine::setFxOn(bool on) { save.fxOn = on; }
