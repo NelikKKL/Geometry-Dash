@@ -164,8 +164,8 @@ void Emitter::draw(float camX, float camY) const {
     }
 }
 
-Emitter* ParticleSet::add(const std::string& plist, float x, float y, Color tint) {
-    list_.push_back(std::make_unique<Emitter>(plist, x, y, tint));
+Emitter* ParticleSet::add(const std::string& plist, float x, float y, Color tint, float scale) {
+    list_.push_back(std::make_unique<Emitter>(plist, x, y, tint, scale));
     return list_.back().get();
 }
 

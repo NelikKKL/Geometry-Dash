@@ -57,6 +57,7 @@ private:
 
 std::unique_ptr<Board> makeStatsBoard();
 std::unique_ptr<Board> makeMoreGamesBoard();
+std::unique_ptr<Board> makeSongsBoard();     // SongsLayer (also opened from the level-select screen)
 std::unique_ptr<Board> makeOptionsBoard();   // OptionsLayer; leads to the Support / Soundtracks boards and the tutorial
 
 } // namespace ogd

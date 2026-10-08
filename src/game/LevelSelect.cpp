@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "core/Level.h"
+#include "game/Boards.h"
 #include "game/Levels.h"
 #include "game/Scenes.h"
 #include "game/Ui.h"
@@ -31,15 +32,8 @@ public:
             LevelParseResult r = parseLevelString(txt);
             if (!r.ok) continue;
             available_[i] = true;
-            if (r.level.settings.hasBackground) {
-                const auto& c = r.level.settings.background;
-                bg_[i] = {c.r, c.g, c.b};
-            }
-            if (r.level.settings.hasGround) {
-                const auto& c = r.level.settings.ground;
-                ground_[i] = {c.r, c.g, c.b};
-            }
         }
+        for (int i = 0; i < kLevelCount; ++i) bg_[i] = ground_[i] = levelPageColor(i);   // the screen ignores the level's own colours
         shownBg_ = bg_[page_];
         shownGround_ = ground_[page_];
 
@@ -58,15 +52,19 @@ public:
         shownBg_ = lerpColor(shownBg_, bg_[page_], k);
         shownGround_ = lerpColor(shownGround_, ground_[page_], k);
         scroll_ += 120.f * dt;
+        if (board_) {
+            board_->update(dt);
+            if (board_->closed) board_.reset();
+        }
     }
 
     void draw() override {
-        drawBackground(scroll_ * 0.1f, shownBg_);
-        drawGround(scroll_, shownGround_, kGroundShift);
+        drawPageBackground();
+        drawPageGround();
 
         drawCornerArt(Corner::BottomLeft);
         drawCornerArt(Corner::BottomRight);
-        E().drawSprite(E().sprite("GJ_topBar_001.png"), kW / 2.f, kH - 38.f, 1.05f, 1.05f);
+        E().drawSprite(E().sprite("GJ_topBar_001.png"), kW / 2.f, kH - 36.f, 1.09f, 1.09f);
 
         const LevelMeta& m = levelMeta(page_);
         const Uint8 a = (Uint8)(fade_ * 255);
@@ -74,10 +72,12 @@ public:
 
         // level card: difficulty face + title
         E().drawPanel(E().sprite("square02_001.png"), kCardX, kCardY, kCardW, kCardH, {0, 0, 0}, (Uint8)(110 * fade_));
+        const float ts = fitScale(big, m.name, 545.f, 1.09f);
+        const float titleW = big->bm.measure(m.name) * big->scale * ts;
         char face[40];
         std::snprintf(face, sizeof face, "diffIcon_0%d_btn_001.png", m.difficulty);
-        E().drawSprite(E().sprite(face), 350.f, kCardY, 1.15f, 1.15f, 0, {}, a);
-        E().drawText(big, m.name, 700.f, kCardY - 17.f, fitScale(big, m.name, 520.f, 1.05f), Align::Center, {}, a);
+        E().drawSprite(E().sprite(face), 688.f - titleW / 2.f - 70.f, kCardY, 1.15f, 1.15f, 0, {}, a);   // face sits 70 px left of the centred title
+        E().drawText(big, m.name, 688.f, kCardY - 17.f, ts, Align::Center, {}, a);
 
         // progress bars: scale the label font so that "Normal Mode" is ~236 px wide, as on the device
         const float labelScale = fitScale(big, "Normal Mode", 236.f, 10.f);
@@ -90,21 +90,33 @@ public:
 
         for (auto& b : buttons_) b.draw();
 
-        for (int i = 0; i < kLevelCount; ++i)
-            E().drawSprite(E().sprite("smallDot.png"), kW / 2.f + (i - (kLevelCount - 1) / 2.f) * 34.4f, 33.f, 1.f, 1.f, 0,
+        E().drawText(big, "Download the soundtracks", kW / 2.f, 67.f, fitScale(big, "Download the soundtracks", 497.f, 10.f),
+                     Align::Center, {}, a);
+        for (int i = 0; i < kDots; ++i)                       // 8 dots: the last one belongs to the soundtracks page
+            E().drawSprite(E().sprite("smallDot.png"), kW / 2.f + (i - (kDots - 1) / 2.f) * 34.4f, 33.f, 1.f, 1.f, 0,
                            {}, i == page_ ? 255 : 110);
+
+        if (board_) board_->draw();
     }
 
     void onDown(float x, float y) override {
+        if (board_) { board_->onDown(x, y); return; }
+        if (inSoundtracks(x, y)) { soundtracksPressed_ = true; return; }
         for (auto& b : buttons_) if (b.onDown(x, y)) return;
         if (inCard(x, y)) cardPressed_ = true;
     }
+    void onMove(float x, float y) override { if (board_) board_->onMove(x, y); }
+    void onWheel(float dy) override { if (board_) board_->onWheel(dy); }
     void onUp(float x, float y) override {
+        if (board_) { board_->onUp(x, y); return; }
+        if (soundtracksPressed_ && inSoundtracks(x, y)) board_ = makeSongsBoard();   // LevelSelectLayer::onDownload
+        soundtracksPressed_ = false;
         for (auto& b : buttons_) b.onUp(x, y);
         if (cardPressed_ && inCard(x, y)) play();
         cardPressed_ = false;
     }
     void onKey(SDL_Keycode k, bool down) override {
+        if (board_) { board_->onKey(k, down); return; }
         if (!down) return;
         if (k == SDLK_LEFT || k == SDLK_a) turn(-1);
         else if (k == SDLK_RIGHT || k == SDLK_d) turn(+1);
@@ -113,6 +125,32 @@ public:
     }
 
 private:
+    // Floor without the dark corner shadows the play screen has.
+    void drawPageGround() {
+        Sprite g = E().sprite("groundSquare_001.png");
+        if (!g || g.w <= 0) return;
+        const float bottom = -50.f - kGroundShift, top = bottom + g.h;
+        float start = -std::fmod(scroll_, g.w);
+        if (start > 0) start -= g.w;
+        for (float x = start; x < kW; x += g.w) E().drawSprite(g, x + g.w / 2, bottom + g.h / 2, 1, 1, 0, shownGround_);
+        Sprite line = E().sprite("floor.png");
+        if (line && line.w > 0) E().drawSprite(line, kW / 2.f, top, std::fmax(1.f, kW / line.w), 1);
+    }
+
+    // Smooth vertical gradient in the page colour with the tile pattern only faintly visible (sampled from the real screen).
+    void drawPageBackground() {
+        Sprite grad = E().sprite("GJ_gradientBG.png");
+        const Color c{(Uint8)(shownBg_.r * 0.92f), (Uint8)(shownBg_.g * 0.92f), (Uint8)(shownBg_.b * 0.92f)};
+        if (grad && grad.w > 0) E().drawSprite(grad, kW / 2.f, kH / 2.f, kW / grad.w, kH / grad.h, 0, c);
+        else E().clear(c);
+        Sprite bg = E().sprite("game_bg_01_001.png");
+        if (!bg || bg.w <= 0) return;
+        float start = -std::fmod(scroll_ * 0.1f, bg.w);
+        if (start > 0) start -= bg.w;
+        for (float x = start; x < kW; x += bg.w) E().drawSprite(bg, x + bg.w / 2, kH / 2.f, 1, 1, 0, shownBg_, 38);
+    }
+
+    static bool inSoundtracks(float x, float y) { return std::fabs(x - kW / 2.f) < 260.f && std::fabs(y - 67.f) < 22.f; }
     static bool inCard(float x, float y) { return std::fabs(x - kCardX) < kCardW / 2 && std::fabs(y - kCardY) < kCardH / 2; }
 
     void drawMode(const char* label, float labelY, float barY, float pctY, int percent, float labelScale, float pctScale, Uint8 a) {
@@ -125,10 +163,8 @@ private:
         E().drawText(big, std::to_string(percent) + "%", kW / 2.f, pctY, pctScale, Align::Center, {}, a);
     }
 
-    void turn(int d) {
-        const int n = std::max(0, std::min(kLevelCount - 1, page_ + d));
-        if (n == page_) return;
-        page_ = n;
+    void turn(int d) {                        // the arrows wrap around: Stereo Madness <- -> Jumper
+        page_ = (page_ + d + kLevelCount) % kLevelCount;
         fade_ = 0.f;
     }
     void play() {
@@ -139,7 +175,10 @@ private:
         app().goTo([level] { return makePlayScene(level); });
     }
 
+    static constexpr int kDots = 8;
     int page_;
+    std::unique_ptr<Board> board_;
+    bool soundtracksPressed_ = false;
     float fade_ = 1.f, scroll_ = 0;
     bool leaving_ = false, cardPressed_ = false;
     bool available_[kLevelCount] = {};

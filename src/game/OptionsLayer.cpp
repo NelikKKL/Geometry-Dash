@@ -228,6 +228,7 @@ void OptionsBoard::act(int i) {
 
 } // namespace
 
+std::unique_ptr<Board> makeSongsBoard() { return std::make_unique<SongsBoard>(); }
 std::unique_ptr<Board> makeOptionsBoard() { return std::make_unique<OptionsBoard>(); }
 
 } // namespace ogd

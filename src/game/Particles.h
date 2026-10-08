@@ -64,7 +64,7 @@ private:
 // Fire-and-forget emitters (death burst, landing, pad hit, fireworks ...).
 class ParticleSet {
 public:
-    Emitter* add(const std::string& plist, float x, float y, Color tint = {255, 255, 255});
+    Emitter* add(const std::string& plist, float x, float y, Color tint = {255, 255, 255}, float scale = 2.f);
     void update(float dt);
     void draw(float camX, float camY) const;
     void clear() { list_.clear(); }

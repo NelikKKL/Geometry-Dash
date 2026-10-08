@@ -24,10 +24,16 @@ bool g_debugStartShip = false;
 
 namespace {
 
-constexpr float kPx = 2.f;                // GD units -> design px
-constexpr float kFloorPx = 206.f;         // screen Y of the floor line (camera at rest)
-constexpr float kPlayerScreenX = 380.f;
+// Measured on the original Android build (screenshots, 2460x1080): the view is fixed-height and
+// shows exactly 320 GD units vertically (3.375 px/unit), the floor line rests 90 units above the
+// bottom edge and the player sits ~39% of the width from the left. Design space here is 1280x720.
+constexpr float kPx = kH / 320.f;              // GD units -> design px
+constexpr float kFloorPx = 90.f * kPx;         // screen Y of the floor line (camera at rest)
+constexpr float kPlayerScreenX = 0.392f * kW;
+constexpr float kObjScale = kPx / 2.f;         // the art was authored for kPx = 2
 constexpr float kPlanePx = kFloorPx + 300.f * kPx;
+constexpr float kCamRiseY = 0.653f * kH;       // cube: the camera starts rising once the player centre passes this line
+constexpr float kCamShipY = 0.45f * kH;        // ship: the camera keeps the ship around this line
 
 Color lerpColor(Color a, Color b, float t) {
     t = std::max(0.f, std::min(1.f, t));
@@ -132,16 +138,51 @@ public:
             timer_ -= dt;
             if (timer_ <= 0.f) restart();
             break;
-        case State::Complete:
+        case State::Complete: {
+            // the classic "level end" wall: after the finish the run continues until the player
+            // hits the wall that popped up ahead; the results board drops in right after
+            if (!wallHit_) {
+                const float frames = dt * 60.f;
+                winX_ += (float)(sim_->config().xVel * sim_->config().speed) * frames;
+                if (sim_->player().mode == PlayMode::Cube && (winY_ > 15.f || winVy_ > 0.f)) {
+                    winVy_ -= (float)(sim_->config().gravity * 0.9) * frames;   // finished mid-jump: land first
+                    winY_ += winVy_ * frames;
+                    if (winY_ <= 15.f) { winY_ = 15.f; winVy_ = 0.f; }
+                }
+                if (winX_ + 15.f >= wallX_) {
+                    winX_ = wallX_ - 15.f;
+                    wallHit_ = true;
+                    fx_.add("landEffect.plist", winX_ * kPx, kFloorPx + (winY_ - 15.f) * kPx, {255, 255, 255}, kPx);
+                }
+                camX_ = winX_ * kPx - kPlayerScreenX;
+            } else if (!boardShown_) {
+                boardTimer_ += dt;
+                if (boardTimer_ >= 0.8f) boardShown_ = true;
+            }
+            // confetti rains over the whole scene while the board is up (yellow squares in the original)
+            confettiTimer_ -= dt;
+            if (confettiTimer_ <= 0.f) {
+                confettiTimer_ = 0.06f;
+                const Color tints[4] = {{255, 230, 80}, {170, 255, 90}, {255, 255, 255}, {255, 190, 60}};
+                Confetti c;
+                c.x = camX_ + (float)(rand() % kW);
+                c.y = camY_ + kH + 30.f;
+                c.vx = -20.f + (float)(rand() % 40);
+                c.vy = -(260.f + (float)(rand() % 220));
+                c.size = 8.f + (float)(rand() % 10);
+                c.c = tints[rand() % 4];
+                confetti_.push_back(c);
+            }
+            for (Confetti& c : confetti_) { c.x += c.vx * dt; c.y += c.vy * dt; }
             fireworks_ -= dt;
             if (fireworks_ <= 0.f) {                   // firework.plist bursts at random spots, as at the end of a level
                 fireworks_ = 0.25f + (rand() % 30) / 100.f;
                 const Color tints[4] = {{255, 80, 80}, {80, 255, 120}, {80, 160, 255}, {255, 230, 80}};
-                fx_.add("firework.plist", camX_ + 80.f + rand() % 1120, camY_ + 300.f + rand() % 320, tints[rand() % 4]);
+                fx_.add("firework.plist", camX_ + 80.f + rand() % 1120, camY_ + 300.f + rand() % 320, tints[rand() % 4], kPx);
             }
-            replay_.update(dt);
-            menu_.update(dt);
+            if (boardShown_) { replay_.update(dt); menu_.update(dt); }
             break;
+        }
         }
     }
 
@@ -153,17 +194,23 @@ public:
             back_.draw();
             return;
         }
-        drawBackground(camX_ * 0.1f, bg_.now, camY_);
-        drawGround(camX_, ground_.now, camY_);
+        drawBackground(camX_ * 0.1f, bg_.now, camY_, kObjScale);
+        drawGround(camX_, ground_.now, camY_, kObjScale);
         const auto& p = sim_->player();
-        if (p.mode == PlayMode::Ship || p.mirrored || camY_ > 40.f) drawCeiling(camX_, ground_.now, camY_, kPlanePx);
+        // The ceiling plane physically exists only for the ship and for flipped gravity; a plain cube
+        // section has no roof (levels rise above the plane freely), so none is drawn there.
+        if (p.mode == PlayMode::Ship || p.mirrored) drawCeiling(camX_, ground_.now, camY_, kPlanePx, kObjScale);
 
         collectVisible();
         drawObjects(true);
+        drawEndWall();
         drawFxBehind();
         if (state_ != State::Dead) drawPlayer();
         drawObjects(false);
         fx_.draw(camX_, camY_);
+
+        for (const Confetti& c : confetti_)
+            E().fillRect(c.x - camX_ - c.size / 2, c.y - camY_ - c.size / 2, c.size, c.size, c.c, 220);
 
         // "Attempt N" lives in the world near the start
         E().drawText(E().font("bigFont.fnt"), "Attempt " + std::to_string(attempts_), 940.f - camX_, 470.f - camY_, 1.0f);
@@ -180,7 +227,7 @@ public:
         }
 
         if (pause_) pause_->draw();
-        if (state_ == State::Complete) drawComplete();
+        if (state_ == State::Complete && boardShown_) drawComplete();
     }
 
     // Level Complete board (layout measured from screenshots of the real game)
@@ -211,7 +258,7 @@ public:
             if (pauseBtn_.onDown(x, y)) return;
             if (practice_ && (checkBtn_.onDown(x, y) || removeBtn_.onDown(x, y))) return;
         }
-        if (state_ == State::Complete) {
+        if (state_ == State::Complete && boardShown_) {
             if (replay_.onDown(x, y)) return;
             if (menu_.onDown(x, y)) return;
         }
@@ -222,7 +269,7 @@ public:
         back_.onUp(x, y);
         pauseBtn_.onUp(x, y);
         if (practice_) { checkBtn_.onUp(x, y); removeBtn_.onUp(x, y); }
-        if (state_ == State::Complete) { replay_.onUp(x, y); menu_.onUp(x, y); }
+        if (state_ == State::Complete && boardShown_) { replay_.onUp(x, y); menu_.onUp(x, y); }
         press(false);
     }
     void onKey(SDL_Keycode k, bool down) override {
@@ -263,6 +310,9 @@ private:
         resetFx();
         camY_ = 0.f;
         camX_ = -kPlayerScreenX;
+        wallHit_ = false;
+        boardShown_ = false;
+        confetti_.clear();
         lastJumps_ = 0;
         if (held_) sim_->setHolding(true);
     }
@@ -381,13 +431,11 @@ private:
     void updateCamera(float dt) {
         const auto& p = sim_->player();
         camX_ = (float)p.x * kPx - kPlayerScreenX;
-        // cube: follow only when the player gets high; ship / gravity sections: show floor and ceiling together
-        float target;
-        if (p.mode == PlayMode::Ship) target = 120.f;
-        else target = std::max(0.f, kFloorPx + (float)p.y * kPx - 470.f);
-        if (p.mirrored) target = std::max(target, 120.f);
-        target = std::min(target, 180.f);
-        camY_ += (target - camY_) * std::min(1.f, dt * 5.f);
+        // Vertical: ease toward keeping the player under the anchor line. There is no upper limit:
+        // the camera follows the level as high as it goes, and it never sinks below the rest view.
+        const float anchor = (p.mode == PlayMode::Ship) ? kCamShipY : kCamRiseY;
+        const float target = std::max(0.f, kFloorPx + (float)p.y * kPx - anchor);
+        camY_ += (target - camY_) * std::min(1.f, dt * 6.f);
     }
 
     void onDeath() {
@@ -403,15 +451,25 @@ private:
             E().persist();
         }
         // explodeEffect.plist, tinted with the player's primary colour (the tint is a guess)
-        fx_.add("explodeEffect.plist", (float)p.x * kPx, kFloorPx + (float)p.y * kPx, main_);
+        fx_.add("explodeEffect.plist", (float)p.x * kPx, kFloorPx + (float)p.y * kPx, main_, kPx);
     }
 
     void onComplete() {
         state_ = State::Complete;
         E().stopMusic();
         E().playSfx("endStart_02.ogg");
+        // the run goes on: the end wall pops up ~8 blocks ahead and the player jogs into it
+        const auto& p = sim_->player();
+        winX_ = (float)p.x;
+        winY_ = (float)p.y;
+        winVy_ = (float)p.vy;
+        wallX_ = winX_ + 240.f;
+        wallHit_ = false;
+        boardShown_ = false;
+        boardTimer_ = 0.f;
+        confettiTimer_ = 0.f;
         fireworks_ = 0.f;
-        fx_.add("levelComplete01.plist", (float)sim_->player().x * kPx, kFloorPx + (float)sim_->player().y * kPx);
+        fx_.add("levelComplete01.plist", winX_ * kPx, kFloorPx + winY_ * kPx, {255, 255, 255}, kPx);
         if (g_debugStartX == 0.0) {
             if (practice_) E().save.recordPracticeBest(index_, 100);
             else E().save.recordBest(index_, 100);
@@ -455,7 +513,7 @@ private:
 
         // dust dragged behind the icon while it slides along the floor / ceiling
         auto drive = [&](std::unique_ptr<Emitter>& e, const char* plist, bool on) {
-            if (!e) e = std::make_unique<Emitter>(plist, wx, bottom);
+            if (!e) e = std::make_unique<Emitter>(plist, wx, bottom, Color{255, 255, 255}, kPx);
             e->setPos(wx - 12.f * kPx, bottom);
             if (on) e->start(); else e->stop();
             e->update(dt);
@@ -472,8 +530,8 @@ private:
             const ObjInfo* info = objectInfo(o.id);
             const float ox = o.x * kPx, oy = kFloorPx + o.y * kPx;
             if (i < used.size() && used[i] && !prevUsed_[i]) {
-                if (info->kind == ObjKind::Pad) fx_.add("bumpEffect.plist", ox, oy - 6.f);
-                else if (info->kind == ObjKind::Orb) fx_.add("ringEffect.plist", ox, oy);
+                if (info->kind == ObjKind::Pad) fx_.add("bumpEffect.plist", ox, oy - 6.f * kObjScale, {255, 255, 255}, kPx);
+                else if (info->kind == ObjKind::Orb) fx_.add("ringEffect.plist", ox, oy, {255, 255, 255}, kPx);
             }
             const char* swirl = nullptr;
             switch (info->kind) {
@@ -485,7 +543,7 @@ private:
             }
             if (swirl) {
                 auto& e = portalFx_[i];
-                if (!e) e = std::make_unique<Emitter>(swirl, ox, oy);
+                if (!e) e = std::make_unique<Emitter>(swirl, ox, oy, Color{255, 255, 255}, kPx);
                 e->update(dt);
                 seen[i] = true;
             }
@@ -518,7 +576,25 @@ private:
     void drawObject(const LevelObject& o, const char* spriteName) {
         const float sx = o.x * kPx - camX_;
         const float sy = kFloorPx + o.y * kPx - camY_;
-        E().drawSprite(E().sprite(spriteName), sx, sy, 1.f, 1.f, o.rotation, {}, 255, o.flipX, o.flipY);
+        E().drawSprite(E().sprite(spriteName), sx, sy, kObjScale, kObjScale, o.rotation, {}, 255, o.flipX, o.flipY);
+    }
+
+    // The wall that pops up at the end of a finished level (the pre-2.0 "level end" wall): a full-height
+    // column of blocks the player jogs into before the results board drops in.
+    void drawEndWall() {
+        if (state_ != State::Complete) return;
+        Sprite b = E().sprite("square_01_001.png");
+        if (!b) return;
+        const float sx = wallX_ * kPx - camX_;
+        if (sx < -60.f || sx > kW + 60.f) return;
+        const float cell = 30.f * kPx;
+        const float floorY = kFloorPx - camY_;
+        const int n = std::max(10, (int)std::ceil((kH - floorY) / cell) + 1);
+        for (int i = 0; i < n; ++i) {
+            const float cy = floorY + cell * (i + 0.5f);
+            E().drawSprite(b, sx, cy, kObjScale * 1.12f, kObjScale * 1.12f, 0, {255, 255, 210}, 90, false, false, true);
+            E().drawSprite(b, sx, cy, kObjScale, kObjScale);
+        }
     }
 
     // behind = everything that goes under the player; otherwise portal fronts, pads and orbs
@@ -539,24 +615,25 @@ private:
 
     void drawPlayer() {
         const auto& p = sim_->player();
-        const float x = (float)p.x * kPx - camX_;
-        const float y = kFloorPx + (float)p.y * kPx - camY_;
+        const bool victory = state_ == State::Complete;          // jogging into the end wall
+        const float x = (victory ? winX_ : (float)p.x) * kPx - camX_;
+        const float y = kFloorPx + (victory ? winY_ : (float)p.y) * kPx - camY_;
         const float flip = p.mirrored ? -1.f : 1.f;
         char a[48], b[48];
         const int cube = std::max(1, std::min(13, E().save.cube));
         std::snprintf(a, sizeof a, "player_%02d_001.png", cube);
         std::snprintf(b, sizeof b, "player_%02d_2_001.png", cube);
         if (p.mode == PlayMode::Cube) {
-            E().drawSprite(E().sprite(b), x, y, 1.f, flip, (float)p.rotation, sec_);
-            E().drawSprite(E().sprite(a), x, y, 1.f, flip, (float)p.rotation, main_);
+            E().drawSprite(E().sprite(b), x, y, kObjScale, kObjScale * flip, (float)p.rotation, sec_);
+            E().drawSprite(E().sprite(a), x, y, kObjScale, kObjScale * flip, (float)p.rotation, main_);
         } else {
             const float rad = (float)p.rotation * 3.14159265f / 180.f;
-            const float off = 8.f * flip;                     // icon sits on top of the ship, rotated with it
-            const float lift = 16.f * flip;                   // the ship centre is 3 units above the floor: raise the artwork
+            const float off = 8.f * kObjScale * flip;             // icon sits on top of the ship, rotated with it
+            const float lift = 16.f * kObjScale * flip;           // the ship centre is 3 units above the floor: raise the artwork
             const float ix = x + off * std::sin(rad), iy = y + lift + off * std::cos(rad);
-            E().drawSprite(E().sprite(b), ix, iy, 0.6f, 0.6f * flip, (float)p.rotation, sec_);
-            E().drawSprite(E().sprite(a), ix, iy, 0.6f, 0.6f * flip, (float)p.rotation, main_);
-            E().drawSprite(E().sprite("ship_01_001.png"), x, y + lift, 1.f, flip, (float)p.rotation, main_);
+            E().drawSprite(E().sprite(b), ix, iy, 0.6f * kObjScale, 0.6f * kObjScale * flip, (float)p.rotation, sec_);
+            E().drawSprite(E().sprite(a), ix, iy, 0.6f * kObjScale, 0.6f * kObjScale * flip, (float)p.rotation, main_);
+            E().drawSprite(E().sprite("ship_01_001.png"), x, y + lift, kObjScale, kObjScale * flip, (float)p.rotation, main_);
         }
     }
 
@@ -592,6 +669,12 @@ private:
     float fireworks_ = 0.f, autoTimer_ = 0.f, sessionTime_ = 0.f;
     long long sessionJumps_ = 0;
     float camX_ = -kPlayerScreenX, camY_ = 0.f, timer_ = 0.f;
+    // end-of-level victory run: the player jogs on until hitting the wall that popped up ahead
+    struct Confetti { float x, y, vx, vy, size; Color c; };
+    std::vector<Confetti> confetti_;
+    float winX_ = 0.f, winY_ = 15.f, winVy_ = 0.f, wallX_ = 0.f;
+    float boardTimer_ = 0.f, confettiTimer_ = 0.f;
+    bool wallHit_ = false, boardShown_ = false;
     int attempts_ = 1;
     long long lastJumps_ = 0;
     bool held_ = false, leaving_ = false;
