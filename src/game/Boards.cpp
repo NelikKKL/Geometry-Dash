@@ -24,6 +24,7 @@ Board::Board(const std::string& title)
 
 void Board::update(float dt) {
     back_.update(dt);
+    updateOverlay(dt);
     if (t_ < 1.f) {
         t_ = std::min(1.f, t_ + dt / 0.55f);
         slideY_ = (1.f - easeBounceOut(t_)) * 760.f;
@@ -33,10 +34,28 @@ void Board::update(float dt) {
     updateInterior(dt);
 }
 
+void Board::drawFrame(float topBarY, float bottomBarY, float inTop, float inBottom, float dy, bool chains) {
+    if (chains) {                                   // the board hangs from them
+        Sprite chain = E().sprite("chain_01_001.png");
+        for (float x : {kChainX0, kChainX1}) E().drawSprite(chain, x, topBarY + 35.f + chain.h / 2 + dy);
+    }
+    Sprite side = E().sprite("GJ_table_side_001.png");
+    const float sideH = side.h * kScale;
+    const int n = std::max(1, (int)std::ceil((inTop - inBottom) / sideH));
+    E().setClip(0.f, bottomBarY + dy, (float)kW, 800.f);        // the side bars end at the bottom bar
+    for (int i = 0; i < n; ++i) {
+        const float y = inTop - sideH / 2 - i * sideH + 6.f + dy;
+        E().drawSprite(side, kInL - 26.f, y, kScale, kScale);
+        E().drawSprite(side, kInR + 26.f, y, kScale, kScale, 0, {}, 255, true);
+    }
+    E().clearClip();
+    E().drawSprite(E().sprite("GJ_table_top_001.png"), kW / 2.f, topBarY + dy, kScale, kScale);
+    E().drawSprite(E().sprite("GJ_table_bottom_001.png"), kW / 2.f, bottomBarY + dy, kScale, kScale);
+}
+
 void Board::draw() {
     const float dy = slideY_;
-
-    // chains first: the board hangs from them
+    // chains behind the interior
     Sprite chain = E().sprite("chain_01_001.png");
     for (float x : {kChainX0, kChainX1}) E().drawSprite(chain, x, kTopBarY + 35.f + chain.h / 2 + dy);
 
@@ -45,38 +64,32 @@ void Board::draw() {
     drawInterior();
     E().clearClip();
 
-    // frame
-    Sprite side = E().sprite("GJ_table_side_001.png");
-    const float sideH = side.h * kScale;
-    for (int i = 0; i < 4; ++i) {
-        const float y = kInTop - sideH / 2 - i * sideH + 6.f + dy;
-        E().drawSprite(side, kInL - 26.f, y, kScale, kScale);
-        E().drawSprite(side, kInR + 26.f, y, kScale, kScale, 0, {}, 255, true);
-    }
-    E().drawSprite(E().sprite("GJ_table_top_001.png"), kW / 2.f, kTopBarY + dy, kScale, kScale);
-    E().drawSprite(E().sprite("GJ_table_bottom_001.png"), kW / 2.f, kBottomBarY + dy, kScale, kScale);
+    drawFrame(kTopBarY, kBottomBarY, kInTop, kInBottom, dy, false);
     Font* big = E().font("bigFont.fnt");
     E().drawText(big, title_, kW / 2.f, kTopBarY - 12.f + dy, fitScale(big, "Stats", 170.f, 10.f));
 
     back_.draw();
+    if (overlayActive()) drawOverlay();
 }
 
 void Board::onDown(float x, float y) {
+    if (overlayActive()) { overlayDown(x, y); return; }
     if (back_.onDown(x, y)) return;
     if (settled() && inInterior(x, y, 0.f)) interiorDown(x, y);
 }
 void Board::onUp(float x, float y) {
+    if (overlayActive()) { overlayUp(x, y); return; }
     back_.onUp(x, y);
     if (settled()) interiorUp(x, y);
 }
 void Board::onMove(float x, float y) {
-    if (settled()) interiorMove(x, y);
+    if (!overlayActive() && settled()) interiorMove(x, y);
 }
 void Board::onWheel(float dy) {
-    if (settled()) interiorWheel(dy);
+    if (!overlayActive() && settled()) interiorWheel(dy);
 }
 void Board::onKey(SDL_Keycode k, bool down) {
-    if (down && k == SDLK_ESCAPE) closed = true;
+    if (down && k == SDLK_ESCAPE) { if (overlayActive()) overlayBack(); else closed = true; }
 }
 
 // ================================================================================================= Stats

@@ -1,6 +1,7 @@
 // Gameplay scene: renders a parsed level with real sprites and runs core/Sim.
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <cstdlib>
 #include <memory>
 #include <vector>
@@ -10,6 +11,8 @@
 #include "core/Sim.h"
 #include "game/Levels.h"
 #include "game/PauseLayer.h"
+#include "game/Particles.h"
+#include "game/Boards.h"
 #include "game/Scenes.h"
 #include "game/Ui.h"
 #include "game/World.h"
@@ -63,8 +66,8 @@ public:
           pauseBtn_("GJ_pauseBtn_001.png", kW - 50.f, kH - 50.f, 1.f, [this] { openPause(); }),
           checkBtn_("GJ_checkpointBtn_001.png", kW / 2.f - 80.f, 70.f, 0.9f, [this] { addCheckpoint(); }),
           removeBtn_("GJ_removeCheckBtn_001.png", kW / 2.f + 80.f, 70.f, 0.9f, [this] { removeCheckpoint(); }),
-          replay_("GJ_replayBtn_001.png", 540.f, 300.f, 0.9f, [this] { restart(); }),
-          menu_("GJ_menuBtn_001.png", 740.f, 300.f, 0.9f, [this] { leave(); }) {
+          replay_("GJ_replayBtn_001.png", 425.f, 90.f, 1.f, [this] { restart(); }),
+          menu_("GJ_menuBtn_001.png", 856.f, 90.f, 1.f, [this] { leave(); }) {
         std::string txt;
         if (E().readText(levelFile(index_), txt)) {
             LevelParseResult r = parseLevelString(txt);
@@ -107,11 +110,14 @@ public:
         pauseBtn_.update(dt);
         if (practice_) { checkBtn_.update(dt); removeBtn_.update(dt); }
         updateParticles(dt);
+        updateFx(dt);
+        if (state_ != State::Complete) sessionTime_ += dt;
 
         switch (state_) {
         case State::Playing: {
             sim_->step(dt * 60.0);
             countJumps();
+            autoCheckpoint(dt);
             applyTriggers();
             bg_.update(dt);
             ground_.update(dt);
@@ -127,6 +133,12 @@ public:
             if (timer_ <= 0.f) restart();
             break;
         case State::Complete:
+            fireworks_ -= dt;
+            if (fireworks_ <= 0.f) {                   // firework.plist bursts at random spots, as at the end of a level
+                fireworks_ = 0.25f + (rand() % 30) / 100.f;
+                const Color tints[4] = {{255, 80, 80}, {80, 255, 120}, {80, 160, 255}, {255, 230, 80}};
+                fx_.add("firework.plist", camX_ + 80.f + rand() % 1120, camY_ + 300.f + rand() % 320, tints[rand() % 4]);
+            }
             replay_.update(dt);
             menu_.update(dt);
             break;
@@ -148,8 +160,10 @@ public:
 
         collectVisible();
         drawObjects(true);
+        drawFxBehind();
         if (state_ != State::Dead) drawPlayer();
         drawObjects(false);
+        fx_.draw(camX_, camY_);
 
         // "Attempt N" lives in the world near the start
         E().drawText(E().font("bigFont.fnt"), "Attempt " + std::to_string(attempts_), 940.f - camX_, 470.f - camY_, 1.0f);
@@ -166,13 +180,28 @@ public:
         }
 
         if (pause_) pause_->draw();
-        if (state_ == State::Complete) {
-            E().fillRect(0, 0, kW, kH, {0, 0, 0}, 110);
-            E().drawSprite(E().sprite("GJ_levelComplete_001.png"), kW / 2.f, 540.f);
-            E().drawText(E().font("bigFont.fnt"), "Attempts: " + std::to_string(attempts_), kW / 2.f, 430.f, 0.8f);
-            replay_.draw();
-            menu_.draw();
-        }
+        if (state_ == State::Complete) drawComplete();
+    }
+
+    // Level Complete board (layout measured from screenshots of the real game)
+    void drawComplete() {
+        Board::drawFrame(632.f, 103.f, Board::kInTop, 133.f, 0.f);
+        E().fillRect(Board::kInL, 133.f, Board::kInR - Board::kInL, Board::kInTop - 133.f, {0, 0, 0}, 170);
+        // the frame draws over the interior edges only; redraw order: interior first would hide the side bars
+        Sprite t = E().sprite("GJ_levelComplete_001.png");
+        if (t && t.w > 0) { const float k = 640.f / t.w; E().drawSprite(t, kW / 2.f, 520.f, k, k); }
+        Font* gold = E().font("goldFont.fnt");
+        const float gs = 263.f / std::max(1.f, gold->bm.measure("Attempts: 5") * gold->scale);
+        const int secs = (int)sessionTime_;
+        char tm[16];
+        std::snprintf(tm, sizeof tm, "%02d:%02d", secs / 60, secs % 60);
+        E().drawText(gold, "Attempts: " + std::to_string(attempts_), kW / 2.f, 425.f, gs);
+        E().drawText(gold, "Jumps: " + std::to_string(sessionJumps_), kW / 2.f, 371.f, gs);
+        E().drawText(gold, std::string("Time: ") + tm, kW / 2.f, 317.f, gs);
+        Font* big = E().font("bigFont.fnt");
+        E().drawText(big, "Well Done!", kW / 2.f, 217.f, 350.f / std::max(1.f, big->bm.measure("Well Done!") * big->scale));
+        replay_.draw();
+        menu_.draw();
     }
 
     void onDown(float x, float y) override {
@@ -198,7 +227,7 @@ public:
     }
     void onKey(SDL_Keycode k, bool down) override {
         if (pause_) {                                   // Esc closes the pause menu (PauseLayer::keyBackClicked)
-            if (k == SDLK_ESCAPE && down) closePause();
+            if (k == SDLK_ESCAPE && down) { if (pause_->helpOpen()) pause_->closeHelp(); else closePause(); }
             return;
         }
         if (k == SDLK_SPACE || k == SDLK_UP || k == SDLK_w) press(down);
@@ -231,6 +260,7 @@ private:
         ground_.set(baseGround_);
         nextTrigger_ = 0;
         particles_.clear();
+        resetFx();
         camY_ = 0.f;
         camX_ = -kPlayerScreenX;
         lastJumps_ = 0;
@@ -261,6 +291,12 @@ private:
         if (!sim_ || state_ != State::Playing || sim_->player().dead) return;
         checkpoints_.push_back({*sim_, bg_, ground_, nextTrigger_, camX_, camY_});
     }
+    // PauseLayer::onAutoCheck. The original interval is not known; a checkpoint every 1.5 s on the ground is a stand-in.
+    void autoCheckpoint(float dt) {
+        if (!practice_ || !E().save.autoCheck) { autoTimer_ = 0.f; return; }
+        autoTimer_ += dt;
+        if (autoTimer_ >= 1.5f && sim_->player().onGround) { autoTimer_ = 0.f; addCheckpoint(); }
+    }
     void removeCheckpoint() {
         if (!checkpoints_.empty()) checkpoints_.pop_back();
     }
@@ -270,6 +306,7 @@ private:
         nextTrigger_ = c.nextTrigger;
         camX_ = c.camX; camY_ = c.camY;
         particles_.clear();
+        resetFx();
         state_ = State::Playing;
         lastJumps_ = sim_->jumpCount();
         sim_->setHolding(held_);
@@ -317,6 +354,7 @@ private:
     void countJumps() {
         const long long j = sim_->jumpCount();
         if (g_debugStartX == 0.0 && j > lastJumps_) E().save.totalJumps += j - lastJumps_;
+        sessionJumps_ += j - lastJumps_;
         lastJumps_ = j;
     }
 
@@ -364,25 +402,16 @@ private:
             else E().save.recordBest(index_, pct);
             E().persist();
         }
-        // burst of squares
-        const float cx = (float)p.x * kPx, cy = kFloorPx + (float)p.y * kPx;
-        for (int i = 0; i < 30; ++i) {
-            const float ang = (float)(rand() % 3600) / 10.f * 3.14159265f / 180.f;
-            const float sp = 150.f + (float)(rand() % 550);
-            Particle q;
-            q.x = cx; q.y = cy;
-            q.vx = std::cos(ang) * sp; q.vy = std::sin(ang) * sp;
-            q.maxLife = q.life = 0.5f + (float)(rand() % 50) / 100.f;
-            q.size = 8.f + (float)(rand() % 14);
-            q.c = (i & 1) ? main_ : sec_;
-            particles_.push_back(q);
-        }
+        // explodeEffect.plist, tinted with the player's primary colour (the tint is a guess)
+        fx_.add("explodeEffect.plist", (float)p.x * kPx, kFloorPx + (float)p.y * kPx, main_);
     }
 
     void onComplete() {
         state_ = State::Complete;
         E().stopMusic();
         E().playSfx("endStart_02.ogg");
+        fireworks_ = 0.f;
+        fx_.add("levelComplete01.plist", (float)sim_->player().x * kPx, kFloorPx + (float)sim_->player().y * kPx);
         if (g_debugStartX == 0.0) {
             if (practice_) E().save.recordPracticeBest(index_, 100);
             else E().save.recordBest(index_, 100);
@@ -398,6 +427,79 @@ private:
             q.y += q.vy * dt;
         }
         particles_.erase(std::remove_if(particles_.begin(), particles_.end(), [](const Particle& q) { return q.life <= 0.f; }), particles_.end());
+    }
+
+    // ---- particle effects (APK emitters) -----------------------------------------------------
+    void resetFx() {
+        fx_.clear();
+        drag_.reset(); shipDrag_.reset(); portalFx_.clear();
+        prevUsed_.clear();
+        wasGround_ = true;
+    }
+
+    void updateFx(float dt) {
+        fx_.update(dt);
+        if (!sim_ || state_ != State::Playing) {
+            if (drag_) drag_->stop();
+            if (shipDrag_) shipDrag_->stop();
+            return;
+        }
+        const auto& p = sim_->player();
+        const float wx = (float)p.x * kPx, wy = kFloorPx + (float)p.y * kPx;
+        const float flip = p.mirrored ? -1.f : 1.f;
+        const float bottom = wy - 15.f * kPx * flip;
+
+        // landing puff
+        if (p.onGround && !wasGround_) fx_.add("landEffect.plist", wx, bottom);
+        wasGround_ = p.onGround;
+
+        // dust dragged behind the icon while it slides along the floor / ceiling
+        auto drive = [&](std::unique_ptr<Emitter>& e, const char* plist, bool on) {
+            if (!e) e = std::make_unique<Emitter>(plist, wx, bottom);
+            e->setPos(wx - 12.f * kPx, bottom);
+            if (on) e->start(); else e->stop();
+            e->update(dt);
+        };
+        drive(drag_, "dragEffect.plist", p.onGround && p.mode == PlayMode::Cube);
+        drive(shipDrag_, "shipDragEffect.plist", p.onGround && p.mode == PlayMode::Ship);
+
+        // pads, rings: effect on the frame they trigger. Portals keep a swirl around them while on screen.
+        const auto& used = sim_->usedFlags();
+        if (prevUsed_.size() != used.size()) prevUsed_.assign(used.size(), 0);
+        std::map<size_t, bool> seen;
+        for (size_t i : visible_) {
+            const LevelObject& o = level_.objects[i];
+            const ObjInfo* info = objectInfo(o.id);
+            const float ox = o.x * kPx, oy = kFloorPx + o.y * kPx;
+            if (i < used.size() && used[i] && !prevUsed_[i]) {
+                if (info->kind == ObjKind::Pad) fx_.add("bumpEffect.plist", ox, oy - 6.f);
+                else if (info->kind == ObjKind::Orb) fx_.add("ringEffect.plist", ox, oy);
+            }
+            const char* swirl = nullptr;
+            switch (info->kind) {
+            case ObjKind::PortalGravityDown: swirl = "portalEffect01.plist"; break;
+            case ObjKind::PortalGravityUp: swirl = "portalEffect02.plist"; break;
+            case ObjKind::PortalCube: swirl = "portalEffect03.plist"; break;
+            case ObjKind::PortalShip: swirl = "portalEffect04.plist"; break;
+            default: break;
+            }
+            if (swirl) {
+                auto& e = portalFx_[i];
+                if (!e) e = std::make_unique<Emitter>(swirl, ox, oy);
+                e->update(dt);
+                seen[i] = true;
+            }
+        }
+        for (auto it = portalFx_.begin(); it != portalFx_.end();) {
+            if (!seen.count(it->first)) it = portalFx_.erase(it); else ++it;
+        }
+        if (prevUsed_.size() == used.size()) prevUsed_ = used;
+    }
+
+    void drawFxBehind() {
+        if (drag_) drag_->draw(camX_, camY_);
+        if (shipDrag_) shipDrag_->draw(camX_, camY_);
+        for (auto& kv : portalFx_) kv.second->draw(camX_, camY_);
     }
 
     // objects near the camera, sorted by draw layer
@@ -482,6 +584,13 @@ private:
     ColorFade bg_, ground_;
     Color baseBg_ = kBlue, baseGround_ = kBlue, main_, sec_;
     std::vector<Particle> particles_;
+    ParticleSet fx_;
+    std::unique_ptr<Emitter> drag_, shipDrag_;
+    std::map<size_t, std::unique_ptr<Emitter>> portalFx_;
+    std::vector<uint8_t> prevUsed_;
+    bool wasGround_ = true;
+    float fireworks_ = 0.f, autoTimer_ = 0.f, sessionTime_ = 0.f;
+    long long sessionJumps_ = 0;
     float camX_ = -kPlayerScreenX, camY_ = 0.f, timer_ = 0.f;
     int attempts_ = 1;
     long long lastJumps_ = 0;

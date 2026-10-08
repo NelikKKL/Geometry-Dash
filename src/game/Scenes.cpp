@@ -7,7 +7,6 @@
 
 #include "game/Boards.h"
 #include "game/Popup.h"
-#include "game/OptionsLayer.h"
 #include "game/Ui.h"
 #include "game/World.h"
 
@@ -105,7 +104,7 @@ public:
             std::string t = bt[i];
             std::function<void()> cb = [this, t] { alert(t, "Not implemented yet."); };
             if (i == 2) cb = [this] { board_ = makeStatsBoard(); };
-            else if (i == 1) cb = [this] { options_ = makeOptionsLayer(); };
+            else if (i == 1) cb = [this] { board_ = makeOptionsBoard(); };
             buttons_.emplace_back(bn[i], bc + bw[i] / 2, 100.f, 1.f, cb);
             bc += bw[i] + 10;
         }
@@ -119,12 +118,12 @@ public:
             if (popup_->closed) popup_.reset();
             return;
         }
-        if (options_) {
-            options_->update(dt);
-            if (options_->closed) options_.reset();
-        } else if (board_) {
+        if (board_) {
             board_->update(dt);
-            if (board_->closed) board_.reset();
+            if (board_->closed) {
+                std::unique_ptr<Board> n = std::move(board_->next);   // Options -> Support / Soundtracks
+                board_ = std::move(n);
+            }
         } else {
             for (auto& b : buttons_) b.update(dt);
         }
@@ -148,28 +147,22 @@ public:
         for (auto& d : deco_) E().drawSprite(E().sprite(d.spr), d.x, d.y, d.s, d.s);
         for (auto& b : buttons_) b.draw();
         if (board_) board_->draw();
-        if (options_) options_->draw();
         if (popup_) popup_->draw();
     }
 
     void onDown(float x, float y) override {
         if (popup_) { popup_->onDown(x, y); return; }
-        if (options_) { options_->onDown(x, y); return; }
         if (board_) { board_->onDown(x, y); return; }
         for (auto& b : buttons_) if (b.onDown(x, y)) break;
     }
     void onUp(float x, float y) override {
         if (popup_) { popup_->onUp(x, y); return; }
-        if (options_) { options_->onUp(x, y); return; }
         if (board_) { board_->onUp(x, y); return; }
         for (auto& b : buttons_) b.onUp(x, y);
     }
     void onMove(float x, float y) override { if (board_) board_->onMove(x, y); }
     void onWheel(float dy) override { if (board_) board_->onWheel(dy); }
-    void onKey(SDL_Keycode k, bool down) override {
-        if (options_) options_->onKey(k, down);
-        else if (board_) board_->onKey(k, down);
-    }
+    void onKey(SDL_Keycode k, bool down) override { if (board_) board_->onKey(k, down); }
 
 private:
     struct Deco { std::string spr; float x, y, s; };
@@ -188,7 +181,6 @@ private:
     std::vector<Deco> deco_;
     std::unique_ptr<Popup> popup_;
     std::unique_ptr<Board> board_;
-    std::unique_ptr<OptionsLayer> options_;
     PlayerState player_;
     int cube_ = 1;
     Color main_, sec_;

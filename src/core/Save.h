@@ -18,6 +18,7 @@ struct SaveData {
     // Settings (GameManager::toggleMusic / toggleFX in the original)
     bool musicOn = true;
     bool fxOn = true;
+    bool autoCheck = true;   // PauseLayer::onAutoCheck: practice mode drops checkpoints on its own
 
     int bestOf(int level) const { return (level >= 0 && level < (int)best.size()) ? best[level] : 0; }
     bool levelCompleted(int level) const { return bestOf(level) >= 100; }

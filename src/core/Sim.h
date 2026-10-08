@@ -63,6 +63,7 @@ public:
     const SimPlayer& player() const { return p_; }
     bool holding() const { return holding_; }
     double endX() const { return endX_; }
+    const std::vector<uint8_t>& usedFlags() const { return used_; }   // per level object: pad/ring/portal already triggered
     long long jumpCount() const { return jumps_; }   // cube jumps + ring jumps since reset (Stats board)
     double progress() const;       // 0..1 (x / x of the last object, like the original percentage)
     const Level& level() const { return *level_; }

@@ -36,6 +36,7 @@ bool SaveData::load(const std::string& path) {
         }
         musicOn = j.value("opt-music", true);
         fxOn = j.value("opt-fx", true);
+        autoCheck = j.value("opt-autocheck", true);
         return true;
     } catch (...) {
         return false;
@@ -69,6 +70,7 @@ bool SaveData::save(const std::string& path) const {
         {"level-practice-best", practiceBest},
         {"opt-music", musicOn},
         {"opt-fx", fxOn},
+        {"opt-autocheck", autoCheck},
         {"stat-jumps", totalJumps},
         {"stat-attempts", totalAttempts},
     };

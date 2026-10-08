@@ -66,7 +66,7 @@ public:
     // ---- drawing (y-up design coordinates, centre-anchored) -------------
     void clear(Color c);
     void drawSprite(const Sprite& s, float cx, float cy, float sx = 1, float sy = 1, float rotDeg = 0,
-                    Color col = {}, Uint8 alpha = 255, bool flipX = false, bool flipY = false);
+                    Color col = {}, Uint8 alpha = 255, bool flipX = false, bool flipY = false, bool additive = false);
     // Repeats the sprite horizontally to cover `width` px starting at leftX (the last tile is cropped). Left-anchored.
     void drawSpriteTiledX(const Sprite& s, float leftX, float cy, float width, Color col = {});
     void drawSpriteCropped(const Sprite& s, float leftX, float cy, float fraction, Color col = {}, float scale = 1.f); // left-anchored

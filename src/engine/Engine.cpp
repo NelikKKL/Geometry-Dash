@@ -277,7 +277,7 @@ void Engine::fillRect(float x, float y, float w, float h, Color c, Uint8 a) {
 }
 
 void Engine::drawSprite(const Sprite& s, float cx, float cy, float sx, float sy, float rot, Color col, Uint8 alpha,
-                        bool flipX, bool flipY) {
+                        bool flipX, bool flipY, bool additive) {
     if (!s.tex) return;
     if (sx < 0) { flipX = !flipX; sx = -sx; }
     if (sy < 0) { flipY = !flipY; sy = -sy; }
@@ -303,7 +303,9 @@ void Engine::drawSprite(const Sprite& s, float cx, float cy, float sx, float sy,
     int flip = SDL_FLIP_NONE;
     if (fh) flip |= SDL_FLIP_HORIZONTAL;
     if (fv) flip |= SDL_FLIP_VERTICAL;
+    if (additive) SDL_SetTextureBlendMode(s.tex, SDL_BLENDMODE_ADD);   // cocos blend 770/1 (SRC_ALPHA, ONE)
     SDL_RenderCopyExF(ren, s.tex, &s.src, &dst, angle, nullptr, (SDL_RendererFlip)flip);
+    if (additive) SDL_SetTextureBlendMode(s.tex, SDL_BLENDMODE_BLEND);
 }
 
 void Engine::drawSpriteCropped(const Sprite& s, float leftX, float cy, float fraction, Color col, float scale) {

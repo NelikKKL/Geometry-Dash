@@ -34,7 +34,7 @@ enum { SDL_QUIT = 0x100, SDL_KEYDOWN = 0x300, SDL_KEYUP, SDL_TEXTINPUT = 0x303, 
 #define SDL_RENDERER_ACCELERATED 1
 #define SDL_RENDERER_SOFTWARE 2
 #define SDL_RENDERER_PRESENTVSYNC 4
-enum { SDL_BLENDMODE_BLEND = 1 };
+enum { SDL_BLENDMODE_BLEND = 1, SDL_BLENDMODE_ADD = 2 };
 
 int SDL_Init(Uint32); void SDL_Quit(); void SDL_Log(const char*, ...); const char* SDL_GetError();
 void SDL_SetHint(const char*, const char*);
