@@ -8,10 +8,9 @@ namespace ogd {
 constexpr Color kBlue{0, 102, 255};
 
 // yOffset: camera height in px (positive = camera moved up, the world shifts down)
-// scale: art scale; the gameplay scene passes kObjScale so the tiles match the current zoom
-void drawBackground(float scrollX, Color tint = kBlue, float yOffset = 0, float scale = 1.f);
-void drawGround(float scrollX, Color tint = kBlue, float yOffset = 0, float scale = 1.f);
-void drawCeiling(float scrollX, Color tint, float yOffset, float planeHeightPx, float scale = 1.f);   // mirrored ground at y = planeHeightPx
+void drawBackground(float scrollX, Color tint = kBlue, float yOffset = 0);
+void drawGround(float scrollX, Color tint = kBlue, float yOffset = 0, float floorTop = 206.f);   // floorTop: y of the floor line in world px
+void drawCeiling(float scrollX, Color tint, float yOffset, float planeHeightPx);   // mirrored ground at y = planeHeightPx
 void drawCube(int cube, const PlayerState& p, float camX, Color main, Color secondary);
 
 // Vertical gradient filling the full width between two y values (y-up).

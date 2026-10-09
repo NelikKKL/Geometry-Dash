@@ -24,16 +24,14 @@ bool g_debugStartShip = false;
 
 namespace {
 
-// Measured on the original Android build (screenshots, 2460x1080): the view is fixed-height and
-// shows exactly 320 GD units vertically (3.375 px/unit), the floor line rests 90 units above the
-// bottom edge and the player sits ~39% of the width from the left. Design space here is 1280x720.
-constexpr float kPx = kH / 320.f;              // GD units -> design px
-constexpr float kFloorPx = 90.f * kPx;         // screen Y of the floor line (camera at rest)
-constexpr float kPlayerScreenX = 0.392f * kW;
-constexpr float kObjScale = kPx / 2.f;         // the art was authored for kPx = 2
+// The original's view is 568.9 x 320 GD units (cocos winSize on a 16:9 phone), ground line at y = 90.
+// World coordinates are drawn at 2 px per unit into a 1137.8 x 640 space that the engine zooms by 1.125 to fill 1280 x 720.
+constexpr float kPx = 2.f;                // GD units -> world px
+constexpr float kZoom = 1.125f;           // world -> screen
+constexpr float kWorldW = 1280.f / kZoom;
+constexpr float kFloorPx = 90.f * kPx;    // y of the floor line (camera at rest)
+constexpr float kPlayerScreenX = (568.889f / 2.f - 75.f) * kPx;   // PlayLayer::updateCamera: x = player - W/2 + 75
 constexpr float kPlanePx = kFloorPx + 300.f * kPx;
-constexpr float kCamRiseY = 0.653f * kH;       // cube: the camera starts rising once the player centre passes this line
-constexpr float kCamShipY = 0.45f * kH;        // ship: the camera keeps the ship around this line
 
 Color lerpColor(Color a, Color b, float t) {
     t = std::max(0.f, std::min(1.f, t));
@@ -138,51 +136,16 @@ public:
             timer_ -= dt;
             if (timer_ <= 0.f) restart();
             break;
-        case State::Complete: {
-            // the classic "level end" wall: after the finish the run continues until the player
-            // hits the wall that popped up ahead; the results board drops in right after
-            if (!wallHit_) {
-                const float frames = dt * 60.f;
-                winX_ += (float)(sim_->config().xVel * sim_->config().speed) * frames;
-                if (sim_->player().mode == PlayMode::Cube && (winY_ > 15.f || winVy_ > 0.f)) {
-                    winVy_ -= (float)(sim_->config().gravity * 0.9) * frames;   // finished mid-jump: land first
-                    winY_ += winVy_ * frames;
-                    if (winY_ <= 15.f) { winY_ = 15.f; winVy_ = 0.f; }
-                }
-                if (winX_ + 15.f >= wallX_) {
-                    winX_ = wallX_ - 15.f;
-                    wallHit_ = true;
-                    fx_.add("landEffect.plist", winX_ * kPx, kFloorPx + (winY_ - 15.f) * kPx, {255, 255, 255}, kPx);
-                }
-                camX_ = winX_ * kPx - kPlayerScreenX;
-            } else if (!boardShown_) {
-                boardTimer_ += dt;
-                if (boardTimer_ >= 0.8f) boardShown_ = true;
-            }
-            // confetti rains over the whole scene while the board is up (yellow squares in the original)
-            confettiTimer_ -= dt;
-            if (confettiTimer_ <= 0.f) {
-                confettiTimer_ = 0.06f;
-                const Color tints[4] = {{255, 230, 80}, {170, 255, 90}, {255, 255, 255}, {255, 190, 60}};
-                Confetti c;
-                c.x = camX_ + (float)(rand() % kW);
-                c.y = camY_ + kH + 30.f;
-                c.vx = -20.f + (float)(rand() % 40);
-                c.vy = -(260.f + (float)(rand() % 220));
-                c.size = 8.f + (float)(rand() % 10);
-                c.c = tints[rand() % 4];
-                confetti_.push_back(c);
-            }
-            for (Confetti& c : confetti_) { c.x += c.vx * dt; c.y += c.vy * dt; }
+        case State::Complete:
             fireworks_ -= dt;
             if (fireworks_ <= 0.f) {                   // firework.plist bursts at random spots, as at the end of a level
                 fireworks_ = 0.25f + (rand() % 30) / 100.f;
                 const Color tints[4] = {{255, 80, 80}, {80, 255, 120}, {80, 160, 255}, {255, 230, 80}};
-                fx_.add("firework.plist", camX_ + 80.f + rand() % 1120, camY_ + 300.f + rand() % 320, tints[rand() % 4], kPx);
+                fx_.add("firework.plist", camX_ + 60.f + rand() % 1000, camY_ + 250.f + rand() % 300, tints[rand() % 4]);
             }
-            if (boardShown_) { replay_.update(dt); menu_.update(dt); }
+            replay_.update(dt);
+            menu_.update(dt);
             break;
-        }
         }
     }
 
@@ -194,32 +157,29 @@ public:
             back_.draw();
             return;
         }
-        drawBackground(camX_ * 0.1f, bg_.now, camY_, kObjScale);
-        drawGround(camX_, ground_.now, camY_, kObjScale);
+        E().setZoom(kZoom);
+        drawBackground(camX_ * 0.1f, bg_.now, camY_);
+        drawGround(camX_, ground_.now, camY_, kFloorPx);
         const auto& p = sim_->player();
-        // The ceiling plane physically exists only for the ship and for flipped gravity; a plain cube
-        // section has no roof (levels rise above the plane freely), so none is drawn there.
-        if (p.mode == PlayMode::Ship || p.mirrored) drawCeiling(camX_, ground_.now, camY_, kPlanePx, kObjScale);
+        // PlayLayer::updateCamera: _ceiling->setVisible(gamemode != cube). It is only a visual of the ship corridor.
+        if (p.mode == PlayMode::Ship) drawCeiling(camX_, ground_.now, camY_, kPlanePx);
 
         collectVisible();
         drawObjects(true);
-        drawEndWall();
         drawFxBehind();
         if (state_ != State::Dead) drawPlayer();
         drawObjects(false);
         fx_.draw(camX_, camY_);
 
-        for (const Confetti& c : confetti_)
-            E().fillRect(c.x - camX_ - c.size / 2, c.y - camY_ - c.size / 2, c.size, c.size, c.c, 220);
-
         // "Attempt N" lives in the world near the start
-        E().drawText(E().font("bigFont.fnt"), "Attempt " + std::to_string(attempts_), 940.f - camX_, 470.f - camY_, 1.0f);
+        E().drawText(E().font("bigFont.fnt"), "Attempt " + std::to_string(attempts_), 940.f - camX_, kFloorPx + 264.f - camY_, 1.0f);
 
         for (const Particle& q : particles_) {
             const float a = std::max(0.f, q.life / q.maxLife);
             E().fillRect(q.x - camX_ - q.size / 2, q.y - camY_ - q.size / 2, q.size, q.size, q.c, (Uint8)(255 * a));
         }
 
+        E().setZoom(1.f);                                 // HUD and menus are not part of the world
         if (!pause_) drawHud();
         if (state_ == State::Playing && !pause_) {
             pauseBtn_.draw();
@@ -227,7 +187,7 @@ public:
         }
 
         if (pause_) pause_->draw();
-        if (state_ == State::Complete && boardShown_) drawComplete();
+        if (state_ == State::Complete) drawComplete();
     }
 
     // Level Complete board (layout measured from screenshots of the real game)
@@ -258,7 +218,7 @@ public:
             if (pauseBtn_.onDown(x, y)) return;
             if (practice_ && (checkBtn_.onDown(x, y) || removeBtn_.onDown(x, y))) return;
         }
-        if (state_ == State::Complete && boardShown_) {
+        if (state_ == State::Complete) {
             if (replay_.onDown(x, y)) return;
             if (menu_.onDown(x, y)) return;
         }
@@ -269,7 +229,7 @@ public:
         back_.onUp(x, y);
         pauseBtn_.onUp(x, y);
         if (practice_) { checkBtn_.onUp(x, y); removeBtn_.onUp(x, y); }
-        if (state_ == State::Complete && boardShown_) { replay_.onUp(x, y); menu_.onUp(x, y); }
+        if (state_ == State::Complete) { replay_.onUp(x, y); menu_.onUp(x, y); }
         press(false);
     }
     void onKey(SDL_Keycode k, bool down) override {
@@ -309,10 +269,9 @@ private:
         particles_.clear();
         resetFx();
         camY_ = 0.f;
+        camCenter_ = g_debugStartShip ? 240.f : 0.f;     // the debug ship start skips the portal that normally sets it
+        lastGroundY_ = 15.f;
         camX_ = -kPlayerScreenX;
-        wallHit_ = false;
-        boardShown_ = false;
-        confetti_.clear();
         lastJumps_ = 0;
         if (held_) sim_->setHolding(true);
     }
@@ -334,12 +293,12 @@ private:
         Simulation sim;
         ColorFade bg, ground;
         size_t nextTrigger;
-        float camX, camY;
+        float camX, camY, camCenter;
     };
 
     void addCheckpoint() {
         if (!sim_ || state_ != State::Playing || sim_->player().dead) return;
-        checkpoints_.push_back({*sim_, bg_, ground_, nextTrigger_, camX_, camY_});
+        checkpoints_.push_back({*sim_, bg_, ground_, nextTrigger_, camX_, camY_, camCenter_});
     }
     // PauseLayer::onAutoCheck. The original interval is not known; a checkpoint every 1.5 s on the ground is a stand-in.
     void autoCheckpoint(float dt) {
@@ -354,7 +313,7 @@ private:
         *sim_ = c.sim;
         bg_ = c.bg; ground_ = c.ground;
         nextTrigger_ = c.nextTrigger;
-        camX_ = c.camX; camY_ = c.camY;
+        camX_ = c.camX; camY_ = c.camY; camCenter_ = c.camCenter;
         particles_.clear();
         resetFx();
         state_ = State::Playing;
@@ -428,14 +387,34 @@ private:
         }
     }
 
+    // Port of PlayLayer::updateCamera (1.0 APK, decompiled). Works in GD units: window 568.9 x 320, floor at y = 90.
+    //  ship:  camera Y -> max(0, cameraYCenter - H/2), smoothing /30   (cameraYCenter is set by the ship portal)
+    //  cube:  follow when the player gets within 90 units of the top edge / 120 of the bottom edge (swapped when
+    //         gravity is flipped); back to 0 when the player last stood on the floor and is below the top margin; smoothing /10
+    //  Y is clamped to [0, 1140 - H]; the original applies the smoothing once per 60 Hz frame.
     void updateCamera(float dt) {
         const auto& p = sim_->player();
         camX_ = (float)p.x * kPx - kPlayerScreenX;
-        // Vertical: ease toward keeping the player under the anchor line. There is no upper limit:
-        // the camera follows the level as high as it goes, and it never sinks below the rest view.
-        const float anchor = (p.mode == PlayMode::Ship) ? kCamShipY : kCamRiseY;
-        const float target = std::max(0.f, kFloorPx + (float)p.y * kPx - anchor);
-        camY_ += (target - camY_) * std::min(1.f, dt * 6.f);
+        const float H = 320.f;
+        float camU = camY_ / kPx;
+        const float pY = 90.f + (float)p.y;                 // original y (cube resting on the floor = 105)
+        float target = camU, div = 10.f;
+        if (p.mode == PlayMode::Ship) {
+            target = std::max(0.f, camCenter_ - H / 2.f);
+            div = 30.f;
+        } else {
+            float a = 90.f, b = 120.f;
+            if (p.mirrored) std::swap(a, b);
+            if (p.onGround) lastGroundY_ = (float)p.y;
+            const bool belowTop = pY <= camU + H - a;
+            if (pY > camU + H - a) target = pY - H + a;
+            else if (pY < camU + b) target = pY - b;
+            if (!p.mirrored && lastGroundY_ <= 15.5f && belowTop) target = 0.f;
+        }
+        const float k = 1.f - std::pow(1.f - 1.f / div, dt * 60.f);
+        camU += (target - camU) * k;
+        camU = std::max(0.f, std::min(camU, 1140.f - H));
+        camY_ = camU * kPx;
     }
 
     void onDeath() {
@@ -451,25 +430,15 @@ private:
             E().persist();
         }
         // explodeEffect.plist, tinted with the player's primary colour (the tint is a guess)
-        fx_.add("explodeEffect.plist", (float)p.x * kPx, kFloorPx + (float)p.y * kPx, main_, kPx);
+        fx_.add("explodeEffect.plist", (float)p.x * kPx, kFloorPx + (float)p.y * kPx, main_);
     }
 
     void onComplete() {
         state_ = State::Complete;
         E().stopMusic();
         E().playSfx("endStart_02.ogg");
-        // the run goes on: the end wall pops up ~8 blocks ahead and the player jogs into it
-        const auto& p = sim_->player();
-        winX_ = (float)p.x;
-        winY_ = (float)p.y;
-        winVy_ = (float)p.vy;
-        wallX_ = winX_ + 240.f;
-        wallHit_ = false;
-        boardShown_ = false;
-        boardTimer_ = 0.f;
-        confettiTimer_ = 0.f;
         fireworks_ = 0.f;
-        fx_.add("levelComplete01.plist", winX_ * kPx, kFloorPx + winY_ * kPx, {255, 255, 255}, kPx);
+        fx_.add("levelComplete01.plist", (float)sim_->player().x * kPx, kFloorPx + (float)sim_->player().y * kPx);
         if (g_debugStartX == 0.0) {
             if (practice_) E().save.recordPracticeBest(index_, 100);
             else E().save.recordBest(index_, 100);
@@ -490,7 +459,7 @@ private:
     // ---- particle effects (APK emitters) -----------------------------------------------------
     void resetFx() {
         fx_.clear();
-        drag_.reset(); shipDrag_.reset(); portalFx_.clear();
+        drag_.reset(); shipDrag_.reset(); glitter_.reset(); portalFx_.clear();
         prevUsed_.clear();
         wasGround_ = true;
     }
@@ -500,6 +469,7 @@ private:
         if (!sim_ || state_ != State::Playing) {
             if (drag_) drag_->stop();
             if (shipDrag_) shipDrag_->stop();
+            if (glitter_) glitter_->stop();
             return;
         }
         const auto& p = sim_->player();
@@ -513,13 +483,21 @@ private:
 
         // dust dragged behind the icon while it slides along the floor / ceiling
         auto drive = [&](std::unique_ptr<Emitter>& e, const char* plist, bool on) {
-            if (!e) e = std::make_unique<Emitter>(plist, wx, bottom, Color{255, 255, 255}, kPx);
-            e->setPos(wx - 12.f * kPx, bottom);
+            if (!e) e = std::make_unique<Emitter>(plist, wx, bottom);
+            e->setPos(wx - 12.f * kPx, plist[0] == 's' ? wy : bottom);
             if (on) e->start(); else e->stop();
             e->update(dt);
         };
         drive(drag_, "dragEffect.plist", p.onGround && p.mode == PlayMode::Cube);
-        drive(shipDrag_, "shipDragEffect.plist", p.onGround && p.mode == PlayMode::Ship);
+        // ship: white sparks thrown out behind it while it thrusts or scrapes along the floor / ceiling
+        // (shipDragEffect.plist is the only emitter the original has for this; when exactly it fires is a guess)
+        drive(shipDrag_, "shipDragEffect.plist", p.mode == PlayMode::Ship && (p.onGround || sim_->holding()));
+
+        // PlayLayer::toggleGlitter: the field of faint dots over the whole view, on while the ship is active
+        if (!glitter_) glitter_ = std::make_unique<Emitter>("glitterEffect.plist", 0.f, 0.f, Color{255, 235, 110});
+        glitter_->setPos(camX_ + kWorldW / 2.f, camY_ + 320.f);
+        if (p.mode == PlayMode::Ship) glitter_->start(); else glitter_->stop();
+        glitter_->update(dt);
 
         // pads, rings: effect on the frame they trigger. Portals keep a swirl around them while on screen.
         const auto& used = sim_->usedFlags();
@@ -530,8 +508,12 @@ private:
             const ObjInfo* info = objectInfo(o.id);
             const float ox = o.x * kPx, oy = kFloorPx + o.y * kPx;
             if (i < used.size() && used[i] && !prevUsed_[i]) {
-                if (info->kind == ObjKind::Pad) fx_.add("bumpEffect.plist", ox, oy - 6.f * kObjScale, {255, 255, 255}, kPx);
-                else if (info->kind == ObjKind::Orb) fx_.add("ringEffect.plist", ox, oy, {255, 255, 255}, kPx);
+                if (info->kind == ObjKind::PortalShip) {          // PlayLayer::changeGameMode: where the camera is centred in ship mode
+                    const float py = o.y + 90.f;
+                    camCenter_ = py < 270.f ? 240.f : std::floor(py / 30.f) * 30.f;
+                }
+                if (info->kind == ObjKind::Pad) fx_.add("bumpEffect.plist", ox, oy - 6.f);
+                else if (info->kind == ObjKind::Orb) fx_.add("ringEffect.plist", ox, oy);
             }
             const char* swirl = nullptr;
             switch (info->kind) {
@@ -543,7 +525,7 @@ private:
             }
             if (swirl) {
                 auto& e = portalFx_[i];
-                if (!e) e = std::make_unique<Emitter>(swirl, ox, oy, Color{255, 255, 255}, kPx);
+                if (!e) e = std::make_unique<Emitter>(swirl, ox, oy);
                 e->update(dt);
                 seen[i] = true;
             }
@@ -555,6 +537,7 @@ private:
     }
 
     void drawFxBehind() {
+        if (glitter_) glitter_->draw(camX_, camY_);
         if (drag_) drag_->draw(camX_, camY_);
         if (shipDrag_) shipDrag_->draw(camX_, camY_);
         for (auto& kv : portalFx_) kv.second->draw(camX_, camY_);
@@ -563,7 +546,7 @@ private:
     // objects near the camera, sorted by draw layer
     void collectVisible() {
         visible_.clear();
-        auto r = level_.range((camX_ - 220.f) / kPx, (camX_ + kW + 220.f) / kPx);
+        auto r = level_.range((camX_ - 220.f) / kPx, (camX_ + kWorldW + 220.f) / kPx);
         for (size_t i = r.first; i < r.second; ++i) {
             const ObjInfo* info = objectInfo(level_.objects[i].id);
             if (info && info->sprite) visible_.push_back(i);
@@ -576,25 +559,7 @@ private:
     void drawObject(const LevelObject& o, const char* spriteName) {
         const float sx = o.x * kPx - camX_;
         const float sy = kFloorPx + o.y * kPx - camY_;
-        E().drawSprite(E().sprite(spriteName), sx, sy, kObjScale, kObjScale, o.rotation, {}, 255, o.flipX, o.flipY);
-    }
-
-    // The wall that pops up at the end of a finished level (the pre-2.0 "level end" wall): a full-height
-    // column of blocks the player jogs into before the results board drops in.
-    void drawEndWall() {
-        if (state_ != State::Complete) return;
-        Sprite b = E().sprite("square_01_001.png");
-        if (!b) return;
-        const float sx = wallX_ * kPx - camX_;
-        if (sx < -60.f || sx > kW + 60.f) return;
-        const float cell = 30.f * kPx;
-        const float floorY = kFloorPx - camY_;
-        const int n = std::max(10, (int)std::ceil((kH - floorY) / cell) + 1);
-        for (int i = 0; i < n; ++i) {
-            const float cy = floorY + cell * (i + 0.5f);
-            E().drawSprite(b, sx, cy, kObjScale * 1.12f, kObjScale * 1.12f, 0, {255, 255, 210}, 90, false, false, true);
-            E().drawSprite(b, sx, cy, kObjScale, kObjScale);
-        }
+        E().drawSprite(E().sprite(spriteName), sx, sy, 1.f, 1.f, o.rotation, {}, 255, o.flipX, o.flipY);
     }
 
     // behind = everything that goes under the player; otherwise portal fronts, pads and orbs
@@ -615,25 +580,24 @@ private:
 
     void drawPlayer() {
         const auto& p = sim_->player();
-        const bool victory = state_ == State::Complete;          // jogging into the end wall
-        const float x = (victory ? winX_ : (float)p.x) * kPx - camX_;
-        const float y = kFloorPx + (victory ? winY_ : (float)p.y) * kPx - camY_;
+        const float x = (float)p.x * kPx - camX_;
+        const float y = kFloorPx + (float)p.y * kPx - camY_;
         const float flip = p.mirrored ? -1.f : 1.f;
         char a[48], b[48];
         const int cube = std::max(1, std::min(13, E().save.cube));
         std::snprintf(a, sizeof a, "player_%02d_001.png", cube);
         std::snprintf(b, sizeof b, "player_%02d_2_001.png", cube);
         if (p.mode == PlayMode::Cube) {
-            E().drawSprite(E().sprite(b), x, y, kObjScale, kObjScale * flip, (float)p.rotation, sec_);
-            E().drawSprite(E().sprite(a), x, y, kObjScale, kObjScale * flip, (float)p.rotation, main_);
+            E().drawSprite(E().sprite(b), x, y, 1.f, flip, (float)p.rotation, sec_);
+            E().drawSprite(E().sprite(a), x, y, 1.f, flip, (float)p.rotation, main_);
         } else {
             const float rad = (float)p.rotation * 3.14159265f / 180.f;
-            const float off = 8.f * kObjScale * flip;             // icon sits on top of the ship, rotated with it
-            const float lift = 16.f * kObjScale * flip;           // the ship centre is 3 units above the floor: raise the artwork
+            const float off = 8.f * flip;                     // icon sits on top of the ship, rotated with it
+            const float lift = 16.f * flip;                   // the ship centre is 3 units above the floor: raise the artwork
             const float ix = x + off * std::sin(rad), iy = y + lift + off * std::cos(rad);
-            E().drawSprite(E().sprite(b), ix, iy, 0.6f * kObjScale, 0.6f * kObjScale * flip, (float)p.rotation, sec_);
-            E().drawSprite(E().sprite(a), ix, iy, 0.6f * kObjScale, 0.6f * kObjScale * flip, (float)p.rotation, main_);
-            E().drawSprite(E().sprite("ship_01_001.png"), x, y + lift, kObjScale, kObjScale * flip, (float)p.rotation, main_);
+            E().drawSprite(E().sprite(b), ix, iy, 0.6f, 0.6f * flip, (float)p.rotation, sec_);
+            E().drawSprite(E().sprite(a), ix, iy, 0.6f, 0.6f * flip, (float)p.rotation, main_);
+            E().drawSprite(E().sprite("ship_01_001.png"), x, y + lift, 1.f, flip, (float)p.rotation, main_);
         }
     }
 
@@ -662,19 +626,13 @@ private:
     Color baseBg_ = kBlue, baseGround_ = kBlue, main_, sec_;
     std::vector<Particle> particles_;
     ParticleSet fx_;
-    std::unique_ptr<Emitter> drag_, shipDrag_;
+    std::unique_ptr<Emitter> drag_, shipDrag_, glitter_;
     std::map<size_t, std::unique_ptr<Emitter>> portalFx_;
     std::vector<uint8_t> prevUsed_;
     bool wasGround_ = true;
     float fireworks_ = 0.f, autoTimer_ = 0.f, sessionTime_ = 0.f;
     long long sessionJumps_ = 0;
-    float camX_ = -kPlayerScreenX, camY_ = 0.f, timer_ = 0.f;
-    // end-of-level victory run: the player jogs on until hitting the wall that popped up ahead
-    struct Confetti { float x, y, vx, vy, size; Color c; };
-    std::vector<Confetti> confetti_;
-    float winX_ = 0.f, winY_ = 15.f, winVy_ = 0.f, wallX_ = 0.f;
-    float boardTimer_ = 0.f, confettiTimer_ = 0.f;
-    bool wallHit_ = false, boardShown_ = false;
+    float camX_ = -kPlayerScreenX, camY_ = 0.f, timer_ = 0.f, camCenter_ = 0.f, lastGroundY_ = 15.f;
     int attempts_ = 1;
     long long lastJumps_ = 0;
     bool held_ = false, leaving_ = false;

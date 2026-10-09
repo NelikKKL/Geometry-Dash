@@ -272,6 +272,7 @@ void Engine::clearClip() { SDL_RenderSetClipRect(ren, nullptr); }
 
 void Engine::fillRect(float x, float y, float w, float h, Color c, Uint8 a) {
     SDL_SetRenderDrawColor(ren, c.r, c.g, c.b, a);
+    x *= zoom_; y *= zoom_; w *= zoom_; h *= zoom_;
     SDL_FRect r{x, kH - y - h, w, h};
     SDL_RenderFillRectF(ren, &r);
 }
@@ -297,6 +298,7 @@ void Engine::drawSprite(const Sprite& s, float cx, float cy, float sx, float sy,
         angle -= 90.0;
         std::swap(fh, fv);
     }
+    px *= zoom_; py *= zoom_; dw *= zoom_; dh *= zoom_;
     SDL_FRect dst{px - dw / 2, (kH - py) - dh / 2, dw, dh};
     SDL_SetTextureColorMod(s.tex, col.r, col.g, col.b);
     SDL_SetTextureAlphaMod(s.tex, alpha);
@@ -336,7 +338,8 @@ void Engine::drawSpriteTiledX(const Sprite& s, float leftX, float cy, float widt
 
 void Engine::drawText(Font* f, const std::string& text, float x, float y, float scale, Align a, Color col, Uint8 alpha) {
     if (!f || !f->tex) return;
-    const float k = scale * f->scale;
+    x *= zoom_; y *= zoom_;
+    const float k = scale * f->scale * zoom_;
     float total = f->bm.measure(text) * k;
     float cursor = (a == Align::Left) ? x : (a == Align::Center ? x - total / 2 : x - total);
     float top = (kH - y) - (f->bm.lineHeight * k) / 2;  // vertically centred on y

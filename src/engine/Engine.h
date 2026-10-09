@@ -85,6 +85,11 @@ public:
     SDL_Renderer* ren = nullptr;
     SaveData save;
     bool audioOk = false;
+    // World zoom: 1 for UI; the play scene sets 1.125 so that 320 GD units fill the screen height (the original's view).
+    // Positions, sizes and text of drawSprite / fillRect / drawText are multiplied by it.
+    void setZoom(float z) { zoom_ = z; }
+    float zoom() const { return zoom_; }
+    float zoom_ = 1.f;
     int musicBase_ = MIX_MAX_VOLUME;   // volume of the current track while Music is on
 
 private:

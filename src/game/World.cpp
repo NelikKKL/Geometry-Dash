@@ -9,33 +9,34 @@
 
 namespace ogd {
 
-void drawBackground(float scrollX, Color tint, float yOffset, float scale) {
+void drawBackground(float scrollX, Color tint, float yOffset) {
     Sprite bg = E().sprite("game_bg_01_001.png");
     if (!bg) { E().clear(tint); return; }
-    float w = bg.w * scale;
+    float w = bg.w;
     float start = -std::fmod(scrollX, w);
     if (start > 0) start -= w;
-    for (float x = start; x < kW; x += w) E().drawSprite(bg, x + w / 2, kH / 2.f - yOffset * 0.1f, scale, scale, 0, tint);
+    const float worldW = kW / E().zoom(), worldH = kH / E().zoom();
+    for (float x = start; x < worldW; x += w) E().drawSprite(bg, x + w / 2, worldH / 2.f - yOffset * 0.1f, 1, 1, 0, tint);
 }
 
-void drawGround(float scrollX, Color tint, float yOffset, float scale) {
+void drawGround(float scrollX, Color tint, float yOffset, float floorTop) {
     Sprite g = E().sprite("groundSquare_001.png");
     if (!g) return;
-    const float w = g.w * scale, h = g.h * scale;
-    const float bottom = -50.f - yOffset;
-    const float top = bottom + h;  // floor line; cube (size 60) rests here when centre Y = 236
-    float start = -std::fmod(scrollX, w);
-    if (start > 0) start -= w;
-    for (float x = start; x < kW; x += w) E().drawSprite(g, x + w / 2, bottom + h / 2, scale, scale, 0, tint);
+    const float bottom = floorTop - g.h - yOffset;
+    const float top = bottom + g.h;  // floor line; cube (size 60) rests here when centre Y = 236
+    float start = -std::fmod(scrollX, g.w);
+    if (start > 0) start -= g.w;
+    const float worldW = kW / E().zoom();
+    for (float x = start; x < worldW; x += g.w) E().drawSprite(g, x + g.w / 2, bottom + g.h / 2, 1, 1, 0, tint);
 
     Sprite line = E().sprite("floor.png");
-    if (line) E().drawSprite(line, kW / 2.f, top, std::fmax(1.f, kW / line.w), 1);
+    if (line) E().drawSprite(line, worldW / 2.f, top, std::fmax(1.f, worldW / line.w), 1);
 
     Sprite shadow = E().sprite("groundSquareShadow_001.png");
     if (shadow) {
-        const float k = 1.6f * scale;
+        const float k = 1.6f;
         E().drawSprite(shadow, shadow.srcW * k / 2, top - shadow.srcH * k / 2, k, k);
-        E().drawSprite(shadow, kW - shadow.srcW * k / 2, top - shadow.srcH * k / 2, k, k, 0, {}, 255, true);
+        E().drawSprite(shadow, worldW - shadow.srcW * k / 2, top - shadow.srcH * k / 2, k, k, 0, {}, 255, true);
     }
 }
 
@@ -77,17 +78,17 @@ void drawCornerArt(Corner c, float scale) {
     E().drawSprite(a, cx, cy, scale, scale, 0, {}, 255, right, top);
 }
 
-void drawCeiling(float scrollX, Color tint, float yOffset, float planeHeightPx, float scale) {
+void drawCeiling(float scrollX, Color tint, float yOffset, float planeHeightPx) {
     Sprite g = E().sprite("groundSquare_001.png");
     if (!g) return;
-    const float w = g.w * scale, h = g.h * scale;
     const float edge = planeHeightPx - yOffset;           // the visible ceiling line (screen y, y-up)
-    if (edge > kH + h) return;
-    float start = -std::fmod(scrollX, w);
-    if (start > 0) start -= w;
-    for (float x = start; x < kW; x += w) E().drawSprite(g, x + w / 2, edge + h / 2, scale, -scale, 0, tint);
+    const float worldW = kW / E().zoom(), worldH = kH / E().zoom();
+    if (edge > worldH + g.h) return;
+    float start = -std::fmod(scrollX, g.w);
+    if (start > 0) start -= g.w;
+    for (float x = start; x < worldW; x += g.w) E().drawSprite(g, x + g.w / 2, edge + g.h / 2, 1, -1, 0, tint);
     Sprite line = E().sprite("floor.png");
-    if (line) E().drawSprite(line, kW / 2.f, edge, std::fmax(1.f, kW / line.w), 1);
+    if (line) E().drawSprite(line, worldW / 2.f, edge, std::fmax(1.f, worldW / line.w), 1);
 }
 
 } // namespace ogd
