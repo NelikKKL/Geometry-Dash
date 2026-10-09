@@ -269,7 +269,8 @@ private:
         particles_.clear();
         resetFx();
         camY_ = 0.f;
-        camCenter_ = g_debugStartShip ? 240.f : 0.f;     // the debug ship start skips the portal that normally sets it
+        camCenter_ = 0.f;
+        prevMode_ = PlayMode::Cube;
         lastGroundY_ = 15.f;
         camX_ = -kPlayerScreenX;
         lastJumps_ = 0;
@@ -314,6 +315,7 @@ private:
         bg_ = c.bg; ground_ = c.ground;
         nextTrigger_ = c.nextTrigger;
         camX_ = c.camX; camY_ = c.camY; camCenter_ = c.camCenter;
+        prevMode_ = sim_->player().mode;
         particles_.clear();
         resetFx();
         state_ = State::Playing;
@@ -387,6 +389,23 @@ private:
         }
     }
 
+    // PlayLayer::changeGameMode (ship): cameraYCenter = 240 for portals below y 270, else the portal's row (multiple of 30).
+    // Found from the ship portal the player has just passed (the nearest one behind it), so it also works after a
+    // checkpoint restore or a debug start.
+    float shipCameraCenter(float playerX) const {
+        auto r = level_.range(playerX - 900.f, playerX + 40.f);
+        float bestX = -1e9f, center = 240.f;
+        for (size_t i = r.first; i < r.second; ++i) {
+            const LevelObject& o = level_.objects[i];
+            const ObjInfo* info = objectInfo(o.id);
+            if (!info || info->kind != ObjKind::PortalShip || o.x > playerX + 30.f || o.x < bestX) continue;
+            bestX = o.x;
+            const float py = o.y + 90.f;
+            center = py < 270.f ? 240.f : std::floor(py / 30.f) * 30.f;
+        }
+        return center;
+    }
+
     // Port of PlayLayer::updateCamera (1.0 APK, decompiled). Works in GD units: window 568.9 x 320, floor at y = 90.
     //  ship:  camera Y -> max(0, cameraYCenter - H/2), smoothing /30   (cameraYCenter is set by the ship portal)
     //  cube:  follow when the player gets within 90 units of the top edge / 120 of the bottom edge (swapped when
@@ -399,6 +418,8 @@ private:
         float camU = camY_ / kPx;
         const float pY = 90.f + (float)p.y;                 // original y (cube resting on the floor = 105)
         float target = camU, div = 10.f;
+        if (p.mode == PlayMode::Ship && prevMode_ != PlayMode::Ship) camCenter_ = shipCameraCenter((float)p.x);
+        prevMode_ = p.mode;
         if (p.mode == PlayMode::Ship) {
             target = std::max(0.f, camCenter_ - H / 2.f);
             div = 30.f;
@@ -508,10 +529,6 @@ private:
             const ObjInfo* info = objectInfo(o.id);
             const float ox = o.x * kPx, oy = kFloorPx + o.y * kPx;
             if (i < used.size() && used[i] && !prevUsed_[i]) {
-                if (info->kind == ObjKind::PortalShip) {          // PlayLayer::changeGameMode: where the camera is centred in ship mode
-                    const float py = o.y + 90.f;
-                    camCenter_ = py < 270.f ? 240.f : std::floor(py / 30.f) * 30.f;
-                }
                 if (info->kind == ObjKind::Pad) fx_.add("bumpEffect.plist", ox, oy - 6.f);
                 else if (info->kind == ObjKind::Orb) fx_.add("ringEffect.plist", ox, oy);
             }
@@ -633,6 +650,7 @@ private:
     float fireworks_ = 0.f, autoTimer_ = 0.f, sessionTime_ = 0.f;
     long long sessionJumps_ = 0;
     float camX_ = -kPlayerScreenX, camY_ = 0.f, timer_ = 0.f, camCenter_ = 0.f, lastGroundY_ = 15.f;
+    PlayMode prevMode_ = PlayMode::Cube;
     int attempts_ = 1;
     long long lastJumps_ = 0;
     bool held_ = false, leaving_ = false;
