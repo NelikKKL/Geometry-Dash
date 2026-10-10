@@ -222,6 +222,10 @@ void Engine::stopMusic() {
     if (audioOk) Mix_HaltMusic();
 }
 
+void Engine::setMusicPosition(double seconds) {
+    if (audioOk && seconds > 0.0) Mix_SetMusicPosition(seconds);
+}
+
 void Engine::pauseMusic() {
     if (audioOk) Mix_PauseMusic();
 }

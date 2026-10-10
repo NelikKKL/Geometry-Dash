@@ -30,6 +30,10 @@ constexpr float kPx = 2.f;                // GD units -> world px
 constexpr float kZoom = 1.125f;           // world -> screen
 constexpr float kWorldW = 1280.f / kZoom;
 constexpr float kFloorPx = 90.f * kPx;    // y of the floor line (camera at rest)
+// End of the level: a wall stands 100 units past the last object. From 200 units before the end the icon is drawn pulled
+// towards the wall's centre; when the sim finishes it is sucked in over kEndTime seconds before the results board opens.
+// (The wall artwork and exact pull curve are approximations; the converging particles are endEffectPortal.plist.)
+constexpr float kEndApproach = 200.f, kEndTime = 0.7f, kWallAhead = 100.f;
 constexpr float kPlayerScreenX = (568.889f / 2.f - 75.f) * kPx;   // PlayLayer::updateCamera: x = player - W/2 + 75
 constexpr float kPlanePx = kFloorPx + 300.f * kPx;
 
@@ -116,18 +120,18 @@ public:
         updateParticles(dt);
         updateFx(dt);
         if (state_ != State::Complete) sessionTime_ += dt;
+        if (state_ == State::Playing) levelTime_ += dt;
 
         switch (state_) {
         case State::Playing: {
             sim_->step(dt * 60.0);
             countJumps();
-            autoCheckpoint(dt);
             applyTriggers();
             bg_.update(dt);
             ground_.update(dt);
             updateCamera(dt);
             if (sim_->player().dead) onDeath();
-            else if (sim_->player().finished) onComplete();
+            else if (sim_->player().finished) beginEnding();
             break;
         }
         case State::Dead:
@@ -135,6 +139,12 @@ public:
             ground_.update(dt);
             timer_ -= dt;
             if (timer_ <= 0.f) restart();
+            break;
+        case State::Ending:
+            endTimer_ += dt;
+            bg_.update(dt);
+            ground_.update(dt);
+            if (endTimer_ >= kEndTime) onComplete();
             break;
         case State::Complete:
             fireworks_ -= dt;
@@ -166,8 +176,9 @@ public:
 
         collectVisible();
         drawObjects(true);
+        drawEndWall();
         drawFxBehind();
-        if (state_ != State::Dead) drawPlayer();
+        if (state_ != State::Dead && state_ != State::Complete) drawPlayer();
         drawObjects(false);
         fx_.draw(camX_, camY_);
 
@@ -249,19 +260,23 @@ public:
     }
 
 private:
-    enum class State { Playing, Dead, Complete };
+    enum class State { Playing, Dead, Ending, Complete };
 
     void press(bool down) {
         held_ = down;
         if (sim_ && state_ == State::Playing) sim_->setHolding(down);
     }
 
-    void startMusic() {
-        if (E().audioOk) E().playMusic(levelMeta(index_).track, 0);
+    void startMusic(float atSeconds = 0.f) {
+        if (!E().audioOk) return;
+        E().playMusic(levelMeta(index_).track, 0);
+        if (atSeconds > 0.f) E().setMusicPosition(atSeconds);
     }
 
     void resetRun() {
         sim_->reset();
+        levelTime_ = 0.f;
+        endTimer_ = 0.f;
         state_ = State::Playing;
         bg_.set(baseBg_);
         ground_.set(baseGround_);
@@ -280,7 +295,7 @@ private:
     void restart() {
         if (practice_ && !checkpoints_.empty()) {      // practice: respawn at the last checkpoint, no new attempt
             restoreCheckpoint(checkpoints_.back());
-            startMusic();
+            startMusic(levelTime_);                       // the track resumes where the checkpoint was, not from 0
             return;
         }
         ++attempts_;
@@ -294,18 +309,19 @@ private:
         Simulation sim;
         ColorFade bg, ground;
         size_t nextTrigger;
-        float camX, camY, camCenter;
+        float camX, camY, camCenter, time;     // time = seconds into the level, so the music can be seeked on respawn
     };
 
     void addCheckpoint() {
         if (!sim_ || state_ != State::Playing || sim_->player().dead) return;
-        checkpoints_.push_back({*sim_, bg_, ground_, nextTrigger_, camX_, camY_, camCenter_});
+        checkpoints_.push_back({*sim_, bg_, ground_, nextTrigger_, camX_, camY_, camCenter_, levelTime_});
     }
-    // PauseLayer::onAutoCheck. The original interval is not known; a checkpoint every 1.5 s on the ground is a stand-in.
-    void autoCheckpoint(float dt) {
-        if (!practice_ || !E().save.autoCheck) { autoTimer_ = 0.f; return; }
-        autoTimer_ += dt;
-        if (autoTimer_ >= 1.5f && sim_->player().onGround) { autoTimer_ = 0.f; addCheckpoint(); }
+    // PlayerObject::tryPlaceCheckpoint (called from hitGround): in practice mode with Auto on, a landing places a
+    // checkpoint when there is none yet or the player is more than 600 units past the last one.
+    void autoCheckpointOnLanding() {
+        if (!practice_ || !E().save.autoCheck) return;
+        const double px = sim_->player().x;
+        if (checkpoints_.empty() || px - checkpoints_.back().sim.player().x > 600.0) addCheckpoint();
     }
     void removeCheckpoint() {
         if (!checkpoints_.empty()) checkpoints_.pop_back();
@@ -315,6 +331,7 @@ private:
         bg_ = c.bg; ground_ = c.ground;
         nextTrigger_ = c.nextTrigger;
         camX_ = c.camX; camY_ = c.camY; camCenter_ = c.camCenter;
+        levelTime_ = c.time;
         prevMode_ = sim_->player().mode;
         particles_.clear();
         resetFx();
@@ -415,6 +432,7 @@ private:
         const auto& p = sim_->player();
         camX_ = (float)p.x * kPx - kPlayerScreenX;
         const float H = 320.f;
+        if (p.onGround) lastGroundY_ = (float)p.y;          // PlayerObject::hitGround stores the landing position
         float camU = camY_ / kPx;
         const float pY = 90.f + (float)p.y;                 // original y (cube resting on the floor = 105)
         float target = camU, div = 10.f;
@@ -426,7 +444,6 @@ private:
         } else {
             float a = 90.f, b = 120.f;
             if (p.mirrored) std::swap(a, b);
-            if (p.onGround) lastGroundY_ = (float)p.y;
             const bool belowTop = pY <= camU + H - a;
             if (pY > camU + H - a) target = pY - H + a;
             else if (pY < camU + b) target = pY - b;
@@ -454,12 +471,39 @@ private:
         fx_.add("explodeEffect.plist", (float)p.x * kPx, kFloorPx + (float)p.y * kPx, main_);
     }
 
+    void beginEnding() {
+        state_ = State::Ending;
+        endTimer_ = 0.f;
+        E().playSfx("endStart_02.ogg");
+    }
+
+    // 0 = icon on its real position .. 1 = inside the wall
+    float endPull() const {
+        if (!sim_) return 0.f;
+        if (state_ == State::Ending) {
+            const float t = std::min(1.f, endTimer_ / kEndTime);
+            return 0.45f + 0.55f * t * t;
+        }
+        const float s = std::max(0.f, std::min(1.f, ((float)sim_->player().x - ((float)sim_->endX() - kEndApproach)) / kEndApproach));
+        return 0.45f * s * s;
+    }
+    float wallX() const { return ((float)sim_->endX() + kWallAhead) * kPx; }      // world px
+    float wallY() const { return camY_ + 320.f; }                                 // middle of the view
+
+    void drawEndWall() {
+        if (!sim_ || sim_->endX() - sim_->player().x > 900.0) return;
+        const float x = wallX() - camX_;
+        E().fillRect(x - 36.f, 0.f, 72.f, 640.f, {0, 0, 0}, 235);                  // the wall
+        E().fillRect(x - 40.f, 0.f, 5.f, 640.f, {255, 255, 255}, 210);              // bright edges
+        E().fillRect(x + 35.f, 0.f, 5.f, 640.f, {255, 255, 255}, 210);
+    }
+
     void onComplete() {
         state_ = State::Complete;
         E().stopMusic();
         E().playSfx("endStart_02.ogg");
         fireworks_ = 0.f;
-        fx_.add("levelComplete01.plist", (float)sim_->player().x * kPx, kFloorPx + (float)sim_->player().y * kPx);
+        fx_.add("levelComplete01.plist", wallX(), wallY());
         if (g_debugStartX == 0.0) {
             if (practice_) E().save.recordPracticeBest(index_, 100);
             else E().save.recordBest(index_, 100);
@@ -480,13 +524,21 @@ private:
     // ---- particle effects (APK emitters) -----------------------------------------------------
     void resetFx() {
         fx_.clear();
-        drag_.reset(); shipDrag_.reset(); glitter_.reset(); portalFx_.clear();
+        drag_.reset(); shipDrag_.reset(); glitter_.reset(); endFx_.reset(); portalFx_.clear();
         prevUsed_.clear();
         wasGround_ = true;
     }
 
     void updateFx(float dt) {
         fx_.update(dt);
+        if (sim_ && (state_ == State::Playing || state_ == State::Ending) && sim_->endX() - sim_->player().x < 700.0) {
+            if (!endFx_) endFx_ = std::make_unique<Emitter>("endEffectPortal.plist", wallX(), wallY());
+            endFx_->setPos(wallX(), wallY());
+            endFx_->update(dt);
+        } else if (endFx_) {
+            endFx_->stop();
+            endFx_->update(dt);
+        }
         if (!sim_ || state_ != State::Playing) {
             if (drag_) drag_->stop();
             if (shipDrag_) shipDrag_->stop();
@@ -499,7 +551,10 @@ private:
         const float bottom = wy - 15.f * kPx * flip;
 
         // landing puff
-        if (p.onGround && !wasGround_) fx_.add("landEffect.plist", wx, bottom);
+        if (p.onGround && !wasGround_) {
+            fx_.add("landEffect.plist", wx, bottom);
+            autoCheckpointOnLanding();
+        }
         wasGround_ = p.onGround;
 
         // dust dragged behind the icon while it slides along the floor / ceiling
@@ -530,7 +585,10 @@ private:
             const float ox = o.x * kPx, oy = kFloorPx + o.y * kPx;
             if (i < used.size() && used[i] && !prevUsed_[i]) {
                 if (info->kind == ObjKind::Pad) fx_.add("bumpEffect.plist", ox, oy - 6.f);
-                else if (info->kind == ObjKind::Orb) fx_.add("ringEffect.plist", ox, oy);
+                else if (info->kind == ObjKind::Orb) {
+                    fx_.add("ringEffect.plist", ox, oy);
+                    lastGroundY_ = (float)p.y;                   // PlayerObject::ringJump also sets lastGroundPos
+                }
             }
             const char* swirl = nullptr;
             switch (info->kind) {
@@ -555,6 +613,7 @@ private:
 
     void drawFxBehind() {
         if (glitter_) glitter_->draw(camX_, camY_);
+        if (endFx_) endFx_->draw(camX_, camY_);
         if (drag_) drag_->draw(camX_, camY_);
         if (shipDrag_) shipDrag_->draw(camX_, camY_);
         for (auto& kv : portalFx_) kv.second->draw(camX_, camY_);
@@ -597,24 +656,34 @@ private:
 
     void drawPlayer() {
         const auto& p = sim_->player();
-        const float x = (float)p.x * kPx - camX_;
-        const float y = kFloorPx + (float)p.y * kPx - camY_;
+        float x = (float)p.x * kPx - camX_;
+        float y = kFloorPx + (float)p.y * kPx - camY_;
+        const float pull = endPull();
+        float S = 1.f;
+        Uint8 al = 255;
+        if (pull > 0.f) {                                   // being sucked into the end wall
+            const float e = pull * pull * (3.f - 2.f * pull);
+            x += (wallX() - camX_ + 0.f - x) * e;
+            y += (wallY() - camY_ - y) * e;
+            S = 1.f - 0.85f * std::max(0.f, (pull - 0.45f) / 0.55f);
+            al = (Uint8)(255.f * (1.f - std::max(0.f, (pull - 0.85f) / 0.15f)));
+        }
         const float flip = p.mirrored ? -1.f : 1.f;
         char a[48], b[48];
         const int cube = std::max(1, std::min(13, E().save.cube));
         std::snprintf(a, sizeof a, "player_%02d_001.png", cube);
         std::snprintf(b, sizeof b, "player_%02d_2_001.png", cube);
         if (p.mode == PlayMode::Cube) {
-            E().drawSprite(E().sprite(b), x, y, 1.f, flip, (float)p.rotation, sec_);
-            E().drawSprite(E().sprite(a), x, y, 1.f, flip, (float)p.rotation, main_);
+            E().drawSprite(E().sprite(b), x, y, S, S * flip, (float)p.rotation, sec_, al);
+            E().drawSprite(E().sprite(a), x, y, S, S * flip, (float)p.rotation, main_, al);
         } else {
             const float rad = (float)p.rotation * 3.14159265f / 180.f;
-            const float off = 8.f * flip;                     // icon sits on top of the ship, rotated with it
-            const float lift = 16.f * flip;                   // the ship centre is 3 units above the floor: raise the artwork
+            const float off = 8.f * flip * S;                 // icon sits on top of the ship, rotated with it
+            const float lift = 16.f * flip * S;               // the ship centre is 3 units above the floor: raise the artwork
             const float ix = x + off * std::sin(rad), iy = y + lift + off * std::cos(rad);
-            E().drawSprite(E().sprite(b), ix, iy, 0.6f, 0.6f * flip, (float)p.rotation, sec_);
-            E().drawSprite(E().sprite(a), ix, iy, 0.6f, 0.6f * flip, (float)p.rotation, main_);
-            E().drawSprite(E().sprite("ship_01_001.png"), x, y + lift, 1.f, flip, (float)p.rotation, main_);
+            E().drawSprite(E().sprite(b), ix, iy, 0.6f * S, 0.6f * S * flip, (float)p.rotation, sec_, al);
+            E().drawSprite(E().sprite(a), ix, iy, 0.6f * S, 0.6f * S * flip, (float)p.rotation, main_, al);
+            E().drawSprite(E().sprite("ship_01_001.png"), x, y + lift, S, S * flip, (float)p.rotation, main_, al);
         }
     }
 
@@ -643,11 +712,11 @@ private:
     Color baseBg_ = kBlue, baseGround_ = kBlue, main_, sec_;
     std::vector<Particle> particles_;
     ParticleSet fx_;
-    std::unique_ptr<Emitter> drag_, shipDrag_, glitter_;
+    std::unique_ptr<Emitter> drag_, shipDrag_, glitter_, endFx_;
     std::map<size_t, std::unique_ptr<Emitter>> portalFx_;
     std::vector<uint8_t> prevUsed_;
     bool wasGround_ = true;
-    float fireworks_ = 0.f, autoTimer_ = 0.f, sessionTime_ = 0.f;
+    float fireworks_ = 0.f, sessionTime_ = 0.f, levelTime_ = 0.f, endTimer_ = 0.f;
     long long sessionJumps_ = 0;
     float camX_ = -kPlayerScreenX, camY_ = 0.f, timer_ = 0.f, camCenter_ = 0.f, lastGroundY_ = 15.f;
     PlayMode prevMode_ = PlayMode::Cube;

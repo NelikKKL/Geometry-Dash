@@ -56,6 +56,7 @@ public:
     Mix_Music* music(const std::string& name);
     void playMusic(const std::string& name, int loops, int volume = MIX_MAX_VOLUME);   // restarts from the beginning; no-op if audio is off
     void stopMusic();
+    void setMusicPosition(double seconds);      // seek the running track (practice mode respawn)
     void pauseMusic();
     void resumeMusic();
     void setMusicOn(bool on);   // Options / pause toggle: mutes or unmutes the running track

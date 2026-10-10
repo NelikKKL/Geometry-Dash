@@ -82,8 +82,8 @@ public:
         // progress bars: scale the label font so that "Normal Mode" is ~236 px wide, as on the device
         const float labelScale = fitScale(big, "Normal Mode", 236.f, 10.f);
         const float pctScale = fitScale(big, "0%", 51.f, 10.f);
-        drawMode("Normal Mode", 327.f, 293.f, 283.f, E().save.bestOf(page_), labelScale, pctScale, a);
-        drawMode("Practice Mode", 213.f, 180.f, 170.f, 0, labelScale, pctScale, a);
+        drawMode("Normal Mode", 327.f, 293.f, 283.f, E().save.bestOf(page_), labelScale, pctScale, a, {0, 255, 0});
+        drawMode("Practice Mode", 213.f, 180.f, 170.f, E().save.practiceBestOf(page_), labelScale, pctScale, a, {0, 200, 255});
 
         if (!available_[page_])
             E().drawText(E().font("chatFont.fnt"), "Level data not found - repack the APK with tools/akrile-tool.mjs", kW / 2.f, 600.f, 0.8f, Align::Center, {255, 140, 140}, a);
@@ -153,13 +153,13 @@ private:
     static bool inSoundtracks(float x, float y) { return std::fabs(x - kW / 2.f) < 260.f && std::fabs(y - 67.f) < 22.f; }
     static bool inCard(float x, float y) { return std::fabs(x - kCardX) < kCardW / 2 && std::fabs(y - kCardY) < kCardH / 2; }
 
-    void drawMode(const char* label, float labelY, float barY, float pctY, int percent, float labelScale, float pctScale, Uint8 a) {
+    void drawMode(const char* label, float labelY, float barY, float pctY, int percent, float labelScale, float pctScale, Uint8 a, Color fill) {
         Font* big = E().font("bigFont.fnt");
         E().drawText(big, label, kW / 2.f, labelY, labelScale, Align::Center, {}, a);
         Sprite bar = E().sprite("GJ_progressBar_001.png");
         const float sx = kCardW / std::max(1.f, bar.w), sy = 45.f / std::max(1.f, bar.h);
         E().drawSprite(bar, kW / 2.f, barY, sx, sy, 0, {0, 0, 0}, (Uint8)(140 * fade_));
-        if (percent > 0) E().drawSpriteCropped(bar, kW / 2.f - kCardW / 2, barY, percent / 100.f, {0, 255, 0}, sx);
+        if (percent > 0) E().drawSpriteCropped(bar, kW / 2.f - kCardW / 2, barY, percent / 100.f, fill, sx);
         E().drawText(big, std::to_string(percent) + "%", kW / 2.f, pctY, pctScale, Align::Center, {}, a);
     }
 
