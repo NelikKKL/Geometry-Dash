@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "core/Palette.h"
+#include "core/Achievements.h"
 #include "core/Unlocks.h"
 #include "game/Levels.h"
 #include "game/Popup.h"
@@ -30,6 +31,11 @@ std::string describe(const UnlockRule& r, const char* what) {
     case UnlockKind::CompleteLevel: return std::string("Complete \"") + levelMeta(r.arg).name + "\"\nto unlock this " + what + ".";
     case UnlockKind::CompleteCount: return "Complete " + std::to_string(r.arg) + " levels\nto unlock this " + what + ".";
     case UnlockKind::CompleteAll: return std::string("Complete all ") + std::to_string(kLevelCount) + " levels\nto unlock this " + what + ".";
+    case UnlockKind::Achievement: {
+        const Achievement* a = findAchievement(r.ach);       // text from AchievementsDesc.plist, e.g. Complete "Polargeist" in Normal mode
+        if (!a) return std::string("This ") + what + " is not available yet.";
+        return a->unachievedDesc + "\nto unlock this " + what + ".";
+    }
     default: return std::string("This ") + what + " is unlocked.";
     }
 }

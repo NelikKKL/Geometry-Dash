@@ -1,4 +1,5 @@
 #include "engine/Engine.h"
+#include "core/Achievements.h"
 
 #include <algorithm>
 #include <cmath>
@@ -64,6 +65,15 @@ bool Engine::init(const std::string& root, const std::string& savePath) {
         SDL_Log("Audio disabled: %s", Mix_GetError());
     }
     save.load(savePath_);
+    {   // achievements (rewards: icons and colours)
+        std::string txt;
+        if (readText("AchievementsDesc.plist", txt)) loadAchievements(txt);
+        // saves from before achievements existed: completed levels already earned their rewards
+        for (int i = 0; i < 7; ++i) {
+            if (save.bestOf(i) >= 100) save.earnAchievement(levelAchievementId(i, false));
+            if (save.practiceBestOf(i) >= 100) save.earnAchievement(levelAchievementId(i, true));
+        }
+    }
     return true;
 }
 

@@ -2,6 +2,7 @@
 #pragma once
 #include <array>
 #include <string>
+#include <vector>
 
 namespace ogd {
 
@@ -19,6 +20,18 @@ struct SaveData {
     bool musicOn = true;
     bool fxOn = true;
     bool autoCheck = true;   // PauseLayer::onAutoCheck: practice mode drops checkpoints on its own
+
+    // Earned achievements (ids like "geometry.ach.level01a"); they unlock icons and colours (AchievementsDesc.plist).
+    std::vector<std::string> achievements;
+    bool hasAchievement(const std::string& id) const {
+        for (auto& a : achievements) if (a == id) return true;
+        return false;
+    }
+    bool earnAchievement(const std::string& id) {      // true when newly earned
+        if (hasAchievement(id)) return false;
+        achievements.push_back(id);
+        return true;
+    }
 
     int bestOf(int level) const { return (level >= 0 && level < (int)best.size()) ? best[level] : 0; }
     bool levelCompleted(int level) const { return bestOf(level) >= 100; }

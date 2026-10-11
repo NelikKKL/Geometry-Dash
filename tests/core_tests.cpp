@@ -318,15 +318,19 @@ static void testUnlocks() {
     for (int i = 1; i <= kIconCount; ++i) lockedIcons += !isUnlocked(iconUnlockRule(i), s, 7);
     for (int c = 0; c < kPaletteSize; ++c) lockedColors += !isUnlocked(colorUnlockRule(c), s, 7);
     CHECK(lockedIcons == 9 && lockedColors == 8);          // 4+9 icons and 4+8 colours, like the original garage
-    CHECK(iconUnlockRule(5).kind == UnlockKind::CompleteLevel && iconUnlockRule(5).arg == 0);
+    // rewards come from the achievements of AchievementsDesc.plist: icon_05..11 <- levelNb (normal), color_05..11 <- levelNa (practice)
+    CHECK(iconUnlockRule(5).kind == UnlockKind::Achievement && iconUnlockRule(5).ach == "geometry.ach.level01b");
+    CHECK(colorUnlockRule(4).ach == "geometry.ach.level01a" && colorUnlockRule(10).ach == "geometry.ach.level07a");
     CHECK(!isUnlocked(iconUnlockRule(5), s, 7));
-    s.recordBest(0, 99); CHECK(!isUnlocked(iconUnlockRule(5), s, 7));
-    s.recordBest(0, 100); CHECK(isUnlocked(iconUnlockRule(5), s, 7) && isUnlocked(colorUnlockRule(4), s, 7));
-    CHECK(!isUnlocked(iconUnlockRule(6), s, 7) && s.completedLevels(7) == 1);
-    for (int l = 1; l < 4; ++l) s.recordBest(l, 100);
-    CHECK(isUnlocked(iconUnlockRule(12), s, 7) && !isUnlocked(iconUnlockRule(13), s, 7));
-    for (int l = 4; l < 7; ++l) s.recordBest(l, 100);
-    CHECK(isUnlocked(iconUnlockRule(13), s, 7) && isUnlocked(colorUnlockRule(11), s, 7));
+    CHECK(s.earnAchievement("geometry.ach.level01b") && !s.earnAchievement("geometry.ach.level01b"));
+    CHECK(isUnlocked(iconUnlockRule(5), s, 7) && !isUnlocked(colorUnlockRule(4), s, 7) && !isUnlocked(iconUnlockRule(6), s, 7));
+    s.earnAchievement("geometry.ach.level01a"); CHECK(isUnlocked(colorUnlockRule(4), s, 7));
+    // the last icon and colour of the original need online features (rating, user levels): not obtainable by playing
+    CHECK(iconUnlockRule(12).ach == "geometry.ach.custom02" && iconUnlockRule(13).ach == "geometry.ach.rate" && colorUnlockRule(11).ach == "geometry.ach.custom01");
+    CHECK(!isUnlocked(iconUnlockRule(13), s, 7));
+    // achievements survive a save round trip
+    const std::string ap = std::string(OGD_TEST_DATA) + "/../ach_tmp.json";
+    CHECK(s.save(ap)); SaveData s2; CHECK(s2.load(ap) && s2.hasAchievement("geometry.ach.level01b") && s2.hasAchievement("geometry.ach.level01a")); std::remove(ap.c_str());
     SaveData d; d.debugUnlockAll = true; CHECK(isUnlocked(iconUnlockRule(13), d, 7));
     // palette wraps and matches the colours seen in the original garage
     CHECK(paletteRgb(0).r == 125 && paletteRgb(0).g == 255 && paletteRgb(3).b == 255 && paletteRgb(12).r == 125 && paletteRgb(-1).g == 255);

@@ -85,7 +85,7 @@ void PauseLayer::draw() {
     const float s0 = 580.f / std::max(1.f, big->bm.measure("Stereo Madness") * big->scale);
     E().drawText(big, name_, kW / 2.f, 620.f, fitScale(big, name_, 760.f, s0));
     drawBar(518.f, "Normal Mode", normal_, {0, 255, 0});
-    drawBar(405.f, "Practice Mode", practice_, {0, 200, 255});
+    drawBar(405.f, "Practice Mode", practice_, {0, 255, 255});
     for (Button& b : buttons_) b.draw();
     if (tut_.active) tut_.draw();
 }

@@ -1,17 +1,20 @@
 // What the player must do to unlock cube icons and colours (a design decision of this project: the original
 // ties them to achievements, which do not exist here yet). Pure data + one predicate, no SDL.
 #pragma once
+#include <string>
+
 #include "core/Save.h"
 
 namespace ogd {
 
 constexpr int kIconCount = 13;   // cube icons 1..13
 
-enum class UnlockKind { Free, CompleteLevel, CompleteCount, CompleteAll };
+enum class UnlockKind { Free, CompleteLevel, CompleteCount, CompleteAll, Achievement };
 
 struct UnlockRule {
     UnlockKind kind = UnlockKind::Free;
     int arg = 0;                 // level index for CompleteLevel, number of levels for CompleteCount
+    std::string ach;             // achievement id for UnlockKind::Achievement (AchievementsDesc.plist)
 };
 
 // icon: 1..kIconCount, colour: 0..kPaletteSize-1

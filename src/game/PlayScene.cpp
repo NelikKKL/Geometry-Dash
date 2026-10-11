@@ -12,6 +12,8 @@
 #include "game/Levels.h"
 #include "game/PauseLayer.h"
 #include "game/Particles.h"
+#include "core/Achievements.h"
+#include "core/Palette.h"
 #include "game/Boards.h"
 #include "game/Scenes.h"
 #include "game/Ui.h"
@@ -33,7 +35,8 @@ constexpr float kFloorPx = 90.f * kPx;    // y of the floor line (camera at rest
 // End of the level: a wall stands 100 units past the last object. From 200 units before the end the icon is drawn pulled
 // towards the wall's centre; when the sim finishes it is sucked in over kEndTime seconds before the results board opens.
 // (The wall artwork and exact pull curve are approximations; the converging particles are endEffectPortal.plist.)
-constexpr float kEndApproach = 200.f, kEndTime = 0.7f, kWallAhead = 100.f;
+constexpr float kEndApproach = 200.f, kEndTime = 0.7f;
+constexpr float kBoardDelay = 2.0f;                 // seconds of "LEVEL COMPLETE!" before the results board opens
 constexpr float kPlayerScreenX = (568.889f / 2.f - 75.f) * kPx;   // PlayLayer::updateCamera: x = player - W/2 + 75
 constexpr float kPlanePx = kFloorPx + 300.f * kPx;
 
@@ -72,8 +75,8 @@ public:
         : index_(index),
           back_("GJ_arrow_01_001.png", 50.f, kH - 50.f, 1.f, [this] { leave(); }),
           pauseBtn_("GJ_pauseBtn_001.png", kW - 50.f, kH - 50.f, 1.f, [this] { openPause(); }),
-          checkBtn_("GJ_checkpointBtn_001.png", kW / 2.f - 80.f, 70.f, 0.9f, [this] { addCheckpoint(); }),
-          removeBtn_("GJ_removeCheckBtn_001.png", kW / 2.f + 80.f, 70.f, 0.9f, [this] { removeCheckpoint(); }),
+          checkBtn_("GJ_checkpointBtn_001.png", 575.f, 72.f, 1.f, [this] { addCheckpoint(); }),
+          removeBtn_("GJ_removeCheckBtn_001.png", 727.f, 72.f, 1.f, [this] { removeCheckpoint(); }),
           replay_("GJ_replayBtn_001.png", 425.f, 90.f, 1.f, [this] { restart(); }),
           menu_("GJ_menuBtn_001.png", 856.f, 90.f, 1.f, [this] { leave(); }) {
         std::string txt;
@@ -147,14 +150,14 @@ public:
             if (endTimer_ >= kEndTime) onComplete();
             break;
         case State::Complete:
+            completeT_ += dt;
             fireworks_ -= dt;
             if (fireworks_ <= 0.f) {                   // firework.plist bursts at random spots, as at the end of a level
                 fireworks_ = 0.25f + (rand() % 30) / 100.f;
                 const Color tints[4] = {{255, 80, 80}, {80, 255, 120}, {80, 160, 255}, {255, 230, 80}};
                 fx_.add("firework.plist", camX_ + 60.f + rand() % 1000, camY_ + 250.f + rand() % 300, tints[rand() % 4]);
             }
-            replay_.update(dt);
-            menu_.update(dt);
+            if (completeT_ >= kBoardDelay) { replay_.update(dt); menu_.update(dt); }
             break;
         }
     }
@@ -198,7 +201,11 @@ public:
         }
 
         if (pause_) pause_->draw();
-        if (state_ == State::Complete) drawComplete();
+        if (state_ == State::Complete) {
+            drawCompleteEffects();
+            if (completeT_ >= kBoardDelay) drawComplete();
+            drawBanner();
+        }
     }
 
     // Level Complete board (layout measured from screenshots of the real game)
@@ -206,7 +213,7 @@ public:
         Board::drawFrame(632.f, 103.f, Board::kInTop, 133.f, 0.f);
         E().fillRect(Board::kInL, 133.f, Board::kInR - Board::kInL, Board::kInTop - 133.f, {0, 0, 0}, 170);
         // the frame draws over the interior edges only; redraw order: interior first would hide the side bars
-        Sprite t = E().sprite("GJ_levelComplete_001.png");
+        Sprite t = E().sprite(practice_ ? "GJ_practiceComplete_001.png" : "GJ_levelComplete_001.png");
         if (t && t.w > 0) { const float k = 640.f / t.w; E().drawSprite(t, kW / 2.f, 520.f, k, k); }
         Font* gold = E().font("goldFont.fnt");
         const float gs = 263.f / std::max(1.f, gold->bm.measure("Attempts: 5") * gold->scale);
@@ -217,7 +224,11 @@ public:
         E().drawText(gold, "Jumps: " + std::to_string(sessionJumps_), kW / 2.f, 371.f, gs);
         E().drawText(gold, std::string("Time: ") + tm, kW / 2.f, 317.f, gs);
         Font* big = E().font("bigFont.fnt");
-        E().drawText(big, "Well Done!", kW / 2.f, 217.f, 350.f / std::max(1.f, big->bm.measure("Well Done!") * big->scale));
+        if (practice_)                                    // EndLevelLayer in practice mode
+            drawRichText(big, "Well done-- Now try to complete it without any checkpoints!", kW / 2.f, 235.f,
+                         0.5f * 350.f / std::max(1.f, big->bm.measure("Well Done!") * big->scale), 520.f, 44.f);
+        else
+            E().drawText(big, "Well Done!", kW / 2.f, 217.f, 350.f / std::max(1.f, big->bm.measure("Well Done!") * big->scale));
         replay_.draw();
         menu_.draw();
     }
@@ -229,7 +240,7 @@ public:
             if (pauseBtn_.onDown(x, y)) return;
             if (practice_ && (checkBtn_.onDown(x, y) || removeBtn_.onDown(x, y))) return;
         }
-        if (state_ == State::Complete) {
+        if (state_ == State::Complete && completeT_ >= kBoardDelay) {
             if (replay_.onDown(x, y)) return;
             if (menu_.onDown(x, y)) return;
         }
@@ -240,7 +251,7 @@ public:
         back_.onUp(x, y);
         pauseBtn_.onUp(x, y);
         if (practice_) { checkBtn_.onUp(x, y); removeBtn_.onUp(x, y); }
-        if (state_ == State::Complete) { replay_.onUp(x, y); menu_.onUp(x, y); }
+        if (state_ == State::Complete && completeT_ >= kBoardDelay) { replay_.onUp(x, y); menu_.onUp(x, y); }
         press(false);
     }
     void onKey(SDL_Keycode k, bool down) override {
@@ -431,6 +442,8 @@ private:
     void updateCamera(float dt) {
         const auto& p = sim_->player();
         camX_ = (float)p.x * kPx - kPlayerScreenX;
+        // the camera stops when the end wall reaches the right edge of the view; the icon then flies on into it
+        camX_ = std::min(camX_, wallEdgeX() - 0.975f * kWorldW);
         const float H = 320.f;
         if (p.onGround) lastGroundY_ = (float)p.y;          // PlayerObject::hitGround stores the landing position
         float camU = camY_ / kPx;
@@ -487,28 +500,115 @@ private:
         const float s = std::max(0.f, std::min(1.f, ((float)sim_->player().x - ((float)sim_->endX() - kEndApproach)) / kEndApproach));
         return 0.45f * s * s;
     }
-    float wallX() const { return ((float)sim_->endX() + kWallAhead) * kPx; }      // world px
+    float wallEdgeX() const { return (float)sim_->endX() * kPx; }                 // world px: where the glowing edge stands
+    float wallX() const { return wallEdgeX() - 14.f; }                            // the point things are pulled into
     float wallY() const { return camY_ + 320.f; }                                 // middle of the view
 
+    // The end wall (measured from screen recordings): a pale-yellow glow fading in towards a bright edge, and behind the
+    // edge a dark panel with a magenta grid that runs off the right side of the screen.
     void drawEndWall() {
-        if (!sim_ || sim_->endX() - sim_->player().x > 900.0) return;
-        const float x = wallX() - camX_;
-        E().fillRect(x - 36.f, 0.f, 72.f, 640.f, {0, 0, 0}, 235);                  // the wall
-        E().fillRect(x - 40.f, 0.f, 5.f, 640.f, {255, 255, 255}, 210);              // bright edges
-        E().fillRect(x + 35.f, 0.f, 5.f, 640.f, {255, 255, 255}, 210);
+        if (!sim_) return;
+        const float x = wallEdgeX() - camX_;
+        if (x > kWorldW + 100.f || x < -200.f) return;
+        const int n = 26;
+        const float gw = 74.f;
+        for (int i = 0; i < n; ++i) {
+            const float t = (float)(i + 1) / n;
+            E().fillRect(x - gw + i * (gw / n), 0.f, gw / n + 0.6f, 640.f, {255, 244, 170}, (Uint8)(235.f * t * t));
+        }
+        E().fillRect(x - 2.f, 0.f, 4.f, 640.f, {255, 255, 255}, 255);
+        const float pw = std::max(0.f, kWorldW - x);
+        E().fillRect(x + 2.f, 0.f, pw + 40.f, 640.f, {32, 0, 30}, 255);
+        for (float gx = x + 8.f; gx < kWorldW + 20.f; gx += 16.f) E().fillRect(gx, 0.f, 1.5f, 640.f, {190, 0, 140}, 150);
+        for (float gy = 4.f; gy < 640.f; gy += 16.f) E().fillRect(x + 2.f, gy, pw + 40.f, 1.5f, {190, 0, 140}, 150);
     }
 
     void onComplete() {
         state_ = State::Complete;
+        completeT_ = 0.f;
         E().stopMusic();
         E().playSfx("endStart_02.ogg");
         fireworks_ = 0.f;
         fx_.add("levelComplete01.plist", wallX(), wallY());
+        bannerStart_ = -1.f;
         if (g_debugStartX == 0.0) {
             if (practice_) E().save.recordPracticeBest(index_, 100);
             else E().save.recordBest(index_, 100);
+            // PlayLayer::levelComplete -> achievements: practice -> level0Na (a colour), normal -> level0Nb (an icon)
+            const std::string id = levelAchievementId(index_, practice_);
+            if (E().save.earnAchievement(id)) {
+                if (const Achievement* a = findAchievement(id)) {
+                    bannerTitle_ = a->title;
+                    bannerDesc_ = rewardText(*a);
+                    bannerIcon_ = a->icon;
+                    bannerStart_ = 0.55f;                       // seconds after the complete text pops up
+                    E().playSfx("achievement_01.ogg");
+                }
+            }
             E().persist();
         }
+    }
+
+    // ---- level-complete presentation ---------------------------------------------------------
+    static float easeOutCubic(float t) { t = std::max(0.f, std::min(1.f, t)); return 1.f - (1.f - t) * (1.f - t) * (1.f - t); }
+
+    void drawRing(float cx, float cy, float r, Color c, Uint8 a) {
+        const int n = 120;
+        for (int i = 0; i < n; ++i) {
+            const float t = 6.2831853f * i / n;
+            E().fillRect(cx + std::cos(t) * r - 1.5f, cy + std::sin(t) * r - 1.5f, 3.f, 3.f, c, a);
+        }
+    }
+
+    // CCCircleWave: a filled disc that grows and fades, followed by thin rings spawned 0.05 s apart (spawnCircle x5)
+    void drawCompleteEffects() {
+        const float cx = (wallEdgeX() - camX_) * kZoom - 60.f, cy = 360.f;
+        const float t = completeT_;
+        if (t < 0.7f) {
+            const float k = easeOutCubic(t / 0.7f), r = 430.f * k;
+            const Uint8 al = (Uint8)(120.f * (1.f - t / 0.7f));
+            for (float yy = -r; yy <= r; yy += 4.f) {
+                const float half = std::sqrt(std::max(0.f, r * r - yy * yy));
+                E().fillRect(cx - half, cy + yy, half * 2.f, 4.f, {255, 190, 225}, al);
+            }
+        }
+        for (int i = 0; i < 5; ++i) {
+            const float tt = (t - 0.05f * (i + 1)) / 1.1f;
+            if (tt <= 0.f || tt >= 1.f) continue;
+            drawRing(cx, cy, 720.f * easeOutCubic(tt), {255, 235, 150}, (Uint8)(210.f * (1.f - tt)));
+        }
+        // "LEVEL COMPLETE!" / "PRACTICE COMPLETE!" pops in over the game and fades before the board opens
+        Sprite sp = E().sprite(practice_ ? "GJ_practiceComplete_001.png" : "GJ_levelComplete_001.png");
+        if (sp && sp.w > 0 && t < kBoardDelay + 0.3f) {
+            const float pop = t < 0.3f ? 0.2f + 0.95f * easeOutCubic(t / 0.3f) : (t < 0.45f ? 1.15f - 0.15f * ((t - 0.3f) / 0.15f) : 1.f);
+            const float fade = t > kBoardDelay - 0.4f ? std::max(0.f, 1.f - (t - (kBoardDelay - 0.4f)) / 0.4f) : 1.f;
+            const float k = 733.f / sp.w * pop;
+            E().drawSprite(sp, kW / 2.f, 450.f, k, k, 0, {}, (Uint8)(255.f * fade));
+        }
+    }
+
+    // AchievementBar: slides down from the top, stays, slides away
+    void drawBanner() {
+        if (bannerStart_ < 0.f) return;
+        const float t = completeT_ - bannerStart_;
+        if (t < 0.f || t > 3.4f) return;
+        const float slide = t < 0.4f ? easeOutCubic(t / 0.4f) : (t > 3.0f ? 1.f - easeOutCubic((t - 3.0f) / 0.4f) : 1.f);
+        const float cx = kW / 2.f, cy = kH + 70.f - 130.f * slide;
+        E().drawPanel(E().sprite("GJ_square01.png"), cx, cy, 560.f, 110.f);
+        const float ix = cx - 215.f;
+        if (bannerIcon_.rfind("icon_", 0) == 0) {
+            char nm[40];
+            std::snprintf(nm, sizeof nm, "player_%02d_001.png", std::atoi(bannerIcon_.c_str() + 5));
+            E().drawSprite(E().sprite(nm), ix, cy, 1.f, 1.f);
+        } else {
+            const int n = std::atoi(bannerIcon_.c_str() + bannerIcon_.find('_') + 1);       // color_05 -> palette index 4
+            const Rgb c = paletteRgb(std::max(0, n - 1));
+            E().fillRect(ix - 28.f, cy - 28.f, 56.f, 56.f, {255, 255, 255}, 255);
+            E().fillRect(ix - 24.f, cy - 24.f, 48.f, 48.f, {c.r, c.g, c.b}, 255);
+        }
+        Font* big = E().font("bigFont.fnt");
+        E().drawText(big, bannerTitle_, cx - 170.f, cy + 14.f, fitScale(big, bannerTitle_, 340.f, 0.8f), Align::Left);
+        E().drawText(E().font("chatFont.fnt"), bannerDesc_, cx - 170.f, cy - 22.f, 1.0f, Align::Left);
     }
 
     void updateParticles(float dt) {
@@ -524,15 +624,23 @@ private:
     // ---- particle effects (APK emitters) -----------------------------------------------------
     void resetFx() {
         fx_.clear();
-        drag_.reset(); shipDrag_.reset(); glitter_.reset(); endFx_.reset(); portalFx_.clear();
+        drag_.reset(); shipDrag_.reset(); glitter_.reset(); endFx_.reset(); portalFx_.clear(); trail_.clear();
         prevUsed_.clear();
         wasGround_ = true;
     }
 
     void updateFx(float dt) {
         fx_.update(dt);
+        fxClock_ += dt;
+        for (auto& t : trail_) t.age += dt;
+        while (!trail_.empty() && trail_.front().age > 0.30f) trail_.erase(trail_.begin());
+        if (sim_ && state_ == State::Playing && sim_->player().mode == PlayMode::Ship) {   // ship motion streak
+            const auto& sp = sim_->player();
+            const float rad = (float)sp.rotation * 3.14159265f / 180.f;
+            trail_.push_back({(float)sp.x * kPx - std::cos(rad) * 18.f, kFloorPx + (float)sp.y * kPx + std::sin(rad) * 18.f, 0.f});
+        }
         if (sim_ && (state_ == State::Playing || state_ == State::Ending) && sim_->endX() - sim_->player().x < 700.0) {
-            if (!endFx_) endFx_ = std::make_unique<Emitter>("endEffectPortal.plist", wallX(), wallY());
+            if (!endFx_) endFx_ = std::make_unique<Emitter>("endEffectPortal.plist", wallX(), wallY(), Color{255, 255, 170});
             endFx_->setPos(wallX(), wallY());
             endFx_->update(dt);
         } else if (endFx_) {
@@ -570,7 +678,7 @@ private:
         drive(shipDrag_, "shipDragEffect.plist", p.mode == PlayMode::Ship && (p.onGround || sim_->holding()));
 
         // PlayLayer::toggleGlitter: the field of faint dots over the whole view, on while the ship is active
-        if (!glitter_) glitter_ = std::make_unique<Emitter>("glitterEffect.plist", 0.f, 0.f, Color{255, 235, 110});
+        if (!glitter_) glitter_ = std::make_unique<Emitter>("glitterEffect.plist", 0.f, 0.f, Color{255, 255, 170});
         glitter_->setPos(camX_ + kWorldW / 2.f, camY_ + 320.f);
         if (p.mode == PlayMode::Ship) glitter_->start(); else glitter_->stop();
         glitter_->update(dt);
@@ -611,7 +719,40 @@ private:
         if (prevUsed_.size() == used.size()) prevUsed_ = used;
     }
 
+    // The ship leaves a white motion streak that fades over ~0.3 s (CCMotionStreak, soft discs along the path here)
+    void drawTrail() {
+        Sprite dot = E().sprite("sun.png");
+        if (!dot || dot.w <= 0 || trail_.size() < 2) return;
+        for (size_t i = 1; i < trail_.size(); ++i) {
+            const TrailPt& a = trail_[i - 1];
+            const TrailPt& b = trail_[i];
+            const float f = 1.f - b.age / 0.30f;
+            if (f <= 0.f) continue;
+            const float len = std::max(1.f, std::hypot(b.x - a.x, b.y - a.y));
+            for (float u = 0.f; u < len; u += 5.f) {
+                const float k = u / len;
+                const float k2 = (14.f * f) / dot.w;
+                E().drawSprite(dot, a.x + (b.x - a.x) * k - camX_, a.y + (b.y - a.y) * k - camY_, k2, k2, 0, {255, 255, 255}, (Uint8)(150.f * f), false, false, true);
+            }
+        }
+    }
+
+    // Practice checkpoints are shown in the level as a floating green crystal
+    void drawCheckpoints() {
+        if (!practice_) return;
+        Sprite cr = E().sprite("checkpoint_01_001.png"), gl = E().sprite("checkpoint_01_glow_001.png");
+        for (const Checkpoint& c : checkpoints_) {
+            const float x = (float)c.sim.player().x * kPx - camX_;
+            if (x < -80.f || x > kWorldW + 80.f) continue;
+            const float y = kFloorPx + (float)c.sim.player().y * kPx - camY_ + 4.f * std::sin(fxClock_ * 3.f + x * 0.01f);
+            E().drawSprite(gl, x, y, 1.5f, 1.5f, 0, {120, 255, 120}, (Uint8)(150 + 60 * std::sin(fxClock_ * 4.f)), false, false, true);
+            E().drawSprite(cr, x, y, 1.f, 1.f);
+        }
+    }
+
     void drawFxBehind() {
+        drawCheckpoints();
+        drawTrail();
         if (glitter_) glitter_->draw(camX_, camY_);
         if (endFx_) endFx_->draw(camX_, camY_);
         if (drag_) drag_->draw(camX_, camY_);
@@ -720,6 +861,10 @@ private:
     long long sessionJumps_ = 0;
     float camX_ = -kPlayerScreenX, camY_ = 0.f, timer_ = 0.f, camCenter_ = 0.f, lastGroundY_ = 15.f;
     PlayMode prevMode_ = PlayMode::Cube;
+    float completeT_ = 0.f, bannerStart_ = -1.f, fxClock_ = 0.f;
+    struct TrailPt { float x, y, age; };
+    std::vector<TrailPt> trail_;
+    std::string bannerTitle_, bannerDesc_, bannerIcon_;
     int attempts_ = 1;
     long long lastJumps_ = 0;
     bool held_ = false, leaving_ = false;

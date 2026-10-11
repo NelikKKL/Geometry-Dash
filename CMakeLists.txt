@@ -12,7 +12,7 @@ option(OGD_BUILD_TESTS "Build unit tests" ON)
 # --- core: pure C++, no SDL (parsers, physics, save data) -------------------
 add_library(ogd_core STATIC
   src/core/Plist.cpp src/core/Atlas.cpp src/core/BMFont.cpp src/core/Save.cpp
-  src/core/Inflate.cpp src/core/Level.cpp src/core/ObjectTable.cpp src/core/Sim.cpp src/core/Unlocks.cpp)
+  src/core/Inflate.cpp src/core/Level.cpp src/core/ObjectTable.cpp src/core/Sim.cpp src/core/Unlocks.cpp src/core/Achievements.cpp)
 target_include_directories(ogd_core PUBLIC src libs)
 
 # --- game -------------------------------------------------------------------
