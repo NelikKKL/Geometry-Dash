@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "core/Save.h"
+
 namespace ogd {
 
 struct Achievement {
@@ -25,6 +27,10 @@ std::string rewardText(const Achievement& a);
 
 // Achievement that unlocks cube icon `icon` (1-based) / main colour `color` (0-based); empty = free or not obtainable
 std::string iconAchievementId(int icon);
-std::string colorAchievementId(int color);
+std::string colorAchievementId(int color, bool secondary = false);
+
+// Counters that earn achievements on their own: jump01/02 (1000 / 10000 jumps), attempt01/02 (100 / 500 attempts).
+// Returns the ids that were newly earned by this call.
+std::vector<std::string> earnProgressAchievements(SaveData& save);
 
 } // namespace ogd

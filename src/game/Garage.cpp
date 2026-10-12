@@ -98,8 +98,8 @@ public:
         if (anyLocked()) E().drawSprite(E().sprite("GJ_unlockTxt_001.png"), 998.f, 345.f);
 
         // colour rows (main, secondary)
-        drawColorRow(kRowMainY, E().save.mainColor);
-        drawColorRow(kRowSecY, E().save.secondaryColor);
+        drawColorRow(kRowMainY, E().save.mainColor, false);
+        drawColorRow(kRowSecY, E().save.secondaryColor, true);
 
         if (popup_) popup_->draw();
     }
@@ -160,12 +160,13 @@ private:
         // a save from a build with other unlock rules may point at a locked entry
         if (!isUnlocked(iconUnlockRule(s.cube), s, kLevelCount)) s.cube = 1;
         if (!isUnlocked(colorUnlockRule(s.mainColor), s, kLevelCount)) s.mainColor = 0;
-        if (!isUnlocked(colorUnlockRule(s.secondaryColor), s, kLevelCount)) s.secondaryColor = 3;
+        if (!isUnlocked(colorUnlockRule(s.secondaryColor, true), s, kLevelCount)) s.secondaryColor = 3;
     }
 
     bool anyLocked() const {
         for (int i = 1; i <= kIconCount; ++i) if (!isUnlocked(iconUnlockRule(i), E().save, kLevelCount)) return true;
-        for (int c = 0; c < kPaletteSize; ++c) if (!isUnlocked(colorUnlockRule(c), E().save, kLevelCount)) return true;
+        for (int c = 0; c < kPaletteSize; ++c)
+            if (!isUnlocked(colorUnlockRule(c), E().save, kLevelCount) || !isUnlocked(colorUnlockRule(c, true), E().save, kLevelCount)) return true;
         return false;
     }
 
@@ -176,7 +177,7 @@ private:
     }
 
     void pickColor(int c, bool main) {
-        const UnlockRule r = colorUnlockRule(c);
+        const UnlockRule r = colorUnlockRule(c, !main);
         if (!isUnlocked(r, E().save, kLevelCount)) { popup_ = std::make_unique<Popup>("Locked", describe(r, "color")); return; }
         int& slot = main ? E().save.mainColor : E().save.secondaryColor;
         if (slot != c) { slot = c; pulse_ = 1.f; E().persist(); }
@@ -209,12 +210,12 @@ private:
         E().drawSprite(E().sprite(a), x, y, scale, scale, 0, main);
     }
 
-    void drawColorRow(float y, int selected) {
+    void drawColorRow(float y, int selected, bool secondary) {
         for (int c = 0; c < kPaletteSize; ++c) {
             const float x = kColorX0 + c * kStep;
             const Color col = paletteColor(c);
             E().fillRect(x - kCell / 2, y - kCell / 2, kCell, kCell, col, 255);
-            if (!isUnlocked(colorUnlockRule(c), E().save, kLevelCount))
+            if (!isUnlocked(colorUnlockRule(c, secondary), E().save, kLevelCount))
                 E().drawSprite(E().sprite("GJ_lockGray_001.png"), x, y, 1.1f, 1.1f);
             if (c == selected) E().drawSprite(E().sprite("GJ_select_001.png"), x, y);
         }

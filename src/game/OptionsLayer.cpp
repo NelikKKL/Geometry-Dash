@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "game/Boards.h"
+#include "game/Notifier.h"
 #include "game/Popup.h"
 #include "game/Songs.h"
 #include "game/Tutorial.h"
@@ -221,7 +222,10 @@ private:
 
 void OptionsBoard::act(int i) {
     if (i == 0) { next = std::make_unique<SupportBoard>(); closed = true; }
-    else if (i == 1) popup_ = std::make_unique<Popup>("Rate", "Thanks for playing!\nThere is no store page for the web port.");
+    else if (i == 1) {
+        popup_ = std::make_unique<Popup>("Rate", "Thanks for playing!\nThere is no store page for the web port.");
+        notifier().earn("geometry.ach.rate");                 // "Rated Geometry Dash, thanks!" (icon 13)
+    }
     else if (i == 2) { next = std::make_unique<SongsBoard>(); closed = true; }
     else tut_.open();
 }

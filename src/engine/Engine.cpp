@@ -73,6 +73,7 @@ bool Engine::init(const std::string& root, const std::string& savePath) {
             if (save.bestOf(i) >= 100) save.earnAchievement(levelAchievementId(i, false));
             if (save.practiceBestOf(i) >= 100) save.earnAchievement(levelAchievementId(i, true));
         }
+        earnProgressAchievements(save);        // jump / attempt counters already past a threshold (no banner)
     }
     return true;
 }

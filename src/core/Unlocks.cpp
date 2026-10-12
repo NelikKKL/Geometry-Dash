@@ -10,8 +10,8 @@ UnlockRule iconUnlockRule(int icon) {
     return {UnlockKind::Achievement, 0, id};
 }
 
-UnlockRule colorUnlockRule(int color) {
-    const std::string id = colorAchievementId(color);
+UnlockRule colorUnlockRule(int color, bool secondary) {
+    const std::string id = colorAchievementId(color, secondary);
     if (id.empty()) return {UnlockKind::Free, 0, ""};
     return {UnlockKind::Achievement, 0, id};
 }

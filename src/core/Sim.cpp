@@ -49,7 +49,8 @@ Simulation::Simulation(const Level& level, const SimConfig& cfg) : level_(&level
         if (info && collidable(info->kind)) (*boxes)[i] = makeBox(o, *info);
     }
     boxes_ = boxes;
-    endX_ = std::max(570.0, (double)level.maxX());      // the original: x of the last object, at least 570
+    // PlayLayer::createObjectsFromSetup: the level ends 340 units after the last object (at least window width + 300)
+    endX_ = std::max(568.889 + 300.0, (double)level.maxX() + 340.0);
     reset();
 }
 

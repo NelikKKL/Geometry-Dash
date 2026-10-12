@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "game/Boards.h"
+#include "game/Notifier.h"
 #include "game/Popup.h"
 #include "game/Ui.h"
 #include "game/World.h"
@@ -103,13 +104,14 @@ public:
         for (int i = 0; i < 3; ++i) {
             std::string t = bt[i];
             std::function<void()> cb = [this, t] { alert(t, "Not implemented yet."); };
-            if (i == 2) cb = [this] { board_ = makeStatsBoard(); };
+            if (i == 0) cb = [this] { board_ = makeAchievementsBoard(); };         // Achievements
+            else if (i == 2) cb = [this] { board_ = makeStatsBoard(); };
             else if (i == 1) cb = [this] { board_ = makeOptionsBoard(); };
             buttons_.emplace_back(bn[i], bc + bw[i] / 2, 100.f, 1.f, cb);
             bc += bw[i] + 10;
         }
         buttons_.emplace_back("robtoplogo_small.png", 170.f, 90.f, 0.8f * 1.13f, [] { SDL_OpenURL("http://www.robtopgames.com"); });
-        buttons_.emplace_back("GJ_moreGamesBtn_001.png", kW - 156.f, 130.f, 0.9f * 1.13f, [this] { board_ = makeMoreGamesBoard(); });
+        buttons_.emplace_back("GJ_moreGamesBtn_001.png", kW - 156.f, 130.f, 0.9f * 1.13f, [this] { board_ = makeMoreGamesBoard(); notifier().earn("geometry.ach.moreGames"); });
     }
 
     void update(float dt) override {

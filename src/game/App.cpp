@@ -1,4 +1,5 @@
 #include "game/App.h"
+#include "game/Notifier.h"
 
 #include <algorithm>
 
@@ -70,6 +71,8 @@ void App::frame() {
         scene_->update(dt);
         scene_->draw();
     }
+    notifier().update(dt);
+    notifier().draw();                              // achievement banners sit above everything
 
     // fade transition
     const float half = 0.25f;

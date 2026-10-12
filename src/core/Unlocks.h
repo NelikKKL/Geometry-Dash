@@ -19,7 +19,7 @@ struct UnlockRule {
 
 // icon: 1..kIconCount, colour: 0..kPaletteSize-1
 UnlockRule iconUnlockRule(int icon);
-UnlockRule colorUnlockRule(int color);
+UnlockRule colorUnlockRule(int color, bool secondary = false);
 
 // levelCount = number of official levels
 bool isUnlocked(const UnlockRule& rule, const SaveData& save, int levelCount);

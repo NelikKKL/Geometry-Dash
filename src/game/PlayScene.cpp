@@ -15,6 +15,7 @@
 #include "core/Achievements.h"
 #include "core/Palette.h"
 #include "game/Boards.h"
+#include "game/Notifier.h"
 #include "game/Scenes.h"
 #include "game/Ui.h"
 #include "game/World.h"
@@ -204,7 +205,6 @@ public:
         if (state_ == State::Complete) {
             drawCompleteEffects();
             if (completeT_ >= kBoardDelay) drawComplete();
-            drawBanner();
         }
     }
 
@@ -389,10 +389,10 @@ private:
     }
 
     // Stats board counters (not counted for debug starts)
-    void countAttempt() { if (g_debugStartX == 0.0) ++E().save.totalAttempts; }
+    void countAttempt() { if (g_debugStartX == 0.0) { ++E().save.totalAttempts; checkProgressAchievements(); } }
     void countJumps() {
         const long long j = sim_->jumpCount();
-        if (g_debugStartX == 0.0 && j > lastJumps_) E().save.totalJumps += j - lastJumps_;
+        if (g_debugStartX == 0.0 && j > lastJumps_) { E().save.totalJumps += j - lastJumps_; checkProgressAchievements(); }
         sessionJumps_ += j - lastJumps_;
         lastJumps_ = j;
     }
@@ -517,10 +517,14 @@ private:
             E().fillRect(x - gw + i * (gw / n), 0.f, gw / n + 0.6f, 640.f, {255, 244, 170}, (Uint8)(235.f * t * t));
         }
         E().fillRect(x - 2.f, 0.f, 4.f, 640.f, {255, 255, 255}, 255);
+        // the wall is built from the same dark outlined blocks as the level and takes the level's colour
+        const Color bc = bg_.now;
+        const Color dark{(Uint8)(bc.r * 0.13f), (Uint8)(bc.g * 0.13f), (Uint8)(bc.b * 0.13f)};
+        const Color line{(Uint8)std::min(255.f, bc.r * 1.15f + 20.f), (Uint8)std::min(255.f, bc.g * 1.15f + 20.f), (Uint8)std::min(255.f, bc.b * 1.15f + 20.f)};
         const float pw = std::max(0.f, kWorldW - x);
-        E().fillRect(x + 2.f, 0.f, pw + 40.f, 640.f, {32, 0, 30}, 255);
-        for (float gx = x + 8.f; gx < kWorldW + 20.f; gx += 16.f) E().fillRect(gx, 0.f, 1.5f, 640.f, {190, 0, 140}, 150);
-        for (float gy = 4.f; gy < 640.f; gy += 16.f) E().fillRect(x + 2.f, gy, pw + 40.f, 1.5f, {190, 0, 140}, 150);
+        E().fillRect(x + 2.f, 0.f, pw + 40.f, 640.f, dark, 255);
+        for (float gx = x + 8.f; gx < kWorldW + 20.f; gx += 16.f) E().fillRect(gx, 0.f, 1.5f, 640.f, line, 170);
+        for (float gy = 4.f; gy < 640.f; gy += 16.f) E().fillRect(x + 2.f, gy, pw + 40.f, 1.5f, line, 170);
     }
 
     void onComplete() {
@@ -530,21 +534,11 @@ private:
         E().playSfx("endStart_02.ogg");
         fireworks_ = 0.f;
         fx_.add("levelComplete01.plist", wallX(), wallY());
-        bannerStart_ = -1.f;
         if (g_debugStartX == 0.0) {
             if (practice_) E().save.recordPracticeBest(index_, 100);
             else E().save.recordBest(index_, 100);
             // PlayLayer::levelComplete -> achievements: practice -> level0Na (a colour), normal -> level0Nb (an icon)
-            const std::string id = levelAchievementId(index_, practice_);
-            if (E().save.earnAchievement(id)) {
-                if (const Achievement* a = findAchievement(id)) {
-                    bannerTitle_ = a->title;
-                    bannerDesc_ = rewardText(*a);
-                    bannerIcon_ = a->icon;
-                    bannerStart_ = 0.55f;                       // seconds after the complete text pops up
-                    E().playSfx("achievement_01.ogg");
-                }
-            }
+            notifier().earn(levelAchievementId(index_, practice_), 0.55f);       // the banner drops in just after the text pops
             E().persist();
         }
     }
@@ -564,9 +558,9 @@ private:
     void drawCompleteEffects() {
         const float cx = (wallEdgeX() - camX_) * kZoom - 60.f, cy = 360.f;
         const float t = completeT_;
-        if (t < 0.7f) {
-            const float k = easeOutCubic(t / 0.7f), r = 430.f * k;
-            const Uint8 al = (Uint8)(120.f * (1.f - t / 0.7f));
+        if (t < 0.5f) {                                   // disc: ~0.5 s, radius about 330 px (measured from the recording)
+            const float k = easeOutCubic(t / 0.5f), r = 330.f * k;
+            const Uint8 al = (Uint8)(130.f * (1.f - t / 0.5f));
             for (float yy = -r; yy <= r; yy += 4.f) {
                 const float half = std::sqrt(std::max(0.f, r * r - yy * yy));
                 E().fillRect(cx - half, cy + yy, half * 2.f, 4.f, {255, 190, 225}, al);
@@ -575,7 +569,7 @@ private:
         for (int i = 0; i < 5; ++i) {
             const float tt = (t - 0.05f * (i + 1)) / 1.1f;
             if (tt <= 0.f || tt >= 1.f) continue;
-            drawRing(cx, cy, 720.f * easeOutCubic(tt), {255, 235, 150}, (Uint8)(210.f * (1.f - tt)));
+            drawRing(cx, cy, 650.f * easeOutCubic(tt), {255, 235, 150}, (Uint8)(210.f * (1.f - tt)));
         }
         // "LEVEL COMPLETE!" / "PRACTICE COMPLETE!" pops in over the game and fades before the board opens
         Sprite sp = E().sprite(practice_ ? "GJ_practiceComplete_001.png" : "GJ_levelComplete_001.png");
@@ -585,30 +579,6 @@ private:
             const float k = 733.f / sp.w * pop;
             E().drawSprite(sp, kW / 2.f, 450.f, k, k, 0, {}, (Uint8)(255.f * fade));
         }
-    }
-
-    // AchievementBar: slides down from the top, stays, slides away
-    void drawBanner() {
-        if (bannerStart_ < 0.f) return;
-        const float t = completeT_ - bannerStart_;
-        if (t < 0.f || t > 3.4f) return;
-        const float slide = t < 0.4f ? easeOutCubic(t / 0.4f) : (t > 3.0f ? 1.f - easeOutCubic((t - 3.0f) / 0.4f) : 1.f);
-        const float cx = kW / 2.f, cy = kH + 70.f - 130.f * slide;
-        E().drawPanel(E().sprite("GJ_square01.png"), cx, cy, 560.f, 110.f);
-        const float ix = cx - 215.f;
-        if (bannerIcon_.rfind("icon_", 0) == 0) {
-            char nm[40];
-            std::snprintf(nm, sizeof nm, "player_%02d_001.png", std::atoi(bannerIcon_.c_str() + 5));
-            E().drawSprite(E().sprite(nm), ix, cy, 1.f, 1.f);
-        } else {
-            const int n = std::atoi(bannerIcon_.c_str() + bannerIcon_.find('_') + 1);       // color_05 -> palette index 4
-            const Rgb c = paletteRgb(std::max(0, n - 1));
-            E().fillRect(ix - 28.f, cy - 28.f, 56.f, 56.f, {255, 255, 255}, 255);
-            E().fillRect(ix - 24.f, cy - 24.f, 48.f, 48.f, {c.r, c.g, c.b}, 255);
-        }
-        Font* big = E().font("bigFont.fnt");
-        E().drawText(big, bannerTitle_, cx - 170.f, cy + 14.f, fitScale(big, bannerTitle_, 340.f, 0.8f), Align::Left);
-        E().drawText(E().font("chatFont.fnt"), bannerDesc_, cx - 170.f, cy - 22.f, 1.0f, Align::Left);
     }
 
     void updateParticles(float dt) {
@@ -861,10 +831,9 @@ private:
     long long sessionJumps_ = 0;
     float camX_ = -kPlayerScreenX, camY_ = 0.f, timer_ = 0.f, camCenter_ = 0.f, lastGroundY_ = 15.f;
     PlayMode prevMode_ = PlayMode::Cube;
-    float completeT_ = 0.f, bannerStart_ = -1.f, fxClock_ = 0.f;
+    float completeT_ = 0.f, fxClock_ = 0.f;
     struct TrailPt { float x, y, age; };
     std::vector<TrailPt> trail_;
-    std::string bannerTitle_, bannerDesc_, bannerIcon_;
     int attempts_ = 1;
     long long lastJumps_ = 0;
     bool held_ = false, leaving_ = false;

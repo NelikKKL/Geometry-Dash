@@ -53,10 +53,33 @@ std::string iconAchievementId(int icon) {
     return "";
 }
 
-std::string colorAchievementId(int color) {
-    if (color >= 4 && color <= 10) return levelAchievementId(color - 4, true);     // color_05..11 <- level 1..7 (practice)
-    if (color == 11) return "geometry.ach.custom01";
-    return "";
+std::string colorAchievementId(int color, bool secondary) {
+    if (!secondary) {
+        if (color >= 4 && color <= 10) return levelAchievementId(color - 4, true);     // color_05..11 <- level 1..7 (practice)
+        if (color == 11) return "geometry.ach.custom01";                               // color_12: a user created level
+        return "";
+    }
+    switch (color) {                                                                   // color2_xx
+    case 4: return "geometry.ach.moreGames";   // color2_5
+    case 5: return "geometry.ach.jump01";      // color2_06
+    case 6: return "geometry.ach.attempt01";   // color2_07
+    case 7: return "geometry.ach.attempt02";   // color2_08
+    case 8: return "geometry.ach.like";        // color2_09
+    case 9: return "geometry.ach.rateDiff";    // color2_10
+    case 10: return "geometry.ach.submit";     // color2_11
+    case 11: return "geometry.ach.jump02";     // color2_12
+    default: return "";
+    }
+}
+
+std::vector<std::string> earnProgressAchievements(SaveData& save) {
+    std::vector<std::string> got;
+    auto check = [&](bool cond, const char* id) { if (cond && save.earnAchievement(id)) got.push_back(id); };
+    check(save.totalJumps >= 1000, "geometry.ach.jump01");
+    check(save.totalJumps >= 10000, "geometry.ach.jump02");
+    check(save.totalAttempts >= 100, "geometry.ach.attempt01");
+    check(save.totalAttempts >= 500, "geometry.ach.attempt02");
+    return got;
 }
 
 } // namespace ogd
