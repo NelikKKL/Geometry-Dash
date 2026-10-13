@@ -1,5 +1,7 @@
 #include "core/Level.h"
 
+#include <cstdio>
+
 #include <algorithm>
 #include <cerrno>
 #include <climits>
@@ -218,6 +220,40 @@ LevelParseResult parseLevelString(const std::string& s) {
         return r;
     }
     return parseLevel(text);
+}
+
+} // namespace ogd
+
+namespace ogd {
+
+void Level::sortByX() {
+    std::stable_sort(objects.begin(), objects.end(), [](const LevelObject& a, const LevelObject& b) { return a.x < b.x; });
+}
+
+std::string serializeLevel(const Level& level) {
+    auto num = [](float v) {
+        char b[32];
+        if (v == (float)(long long)v) std::snprintf(b, sizeof b, "%lld", (long long)v);
+        else std::snprintf(b, sizeof b, "%g", v);
+        return std::string(b);
+    };
+    std::string out;
+    bool first = true;
+    for (auto& kv : level.settings.raw) {
+        if (!first) out += ',';
+        out += kv.first + "," + kv.second;
+        first = false;
+    }
+    out += ';';
+    for (const LevelObject& o : level.objects) {
+        out += "1," + std::to_string(o.id) + ",2," + num(o.x) + ",3," + num(o.y);
+        if (o.flipX) out += ",4,1";
+        if (o.flipY) out += ",5,1";
+        if (o.rotation != 0.f) out += ",6," + num(o.rotation);
+        for (auto& kv : o.extra) out += "," + std::to_string(kv.first) + "," + kv.second;
+        out += ';';
+    }
+    return out;
 }
 
 } // namespace ogd

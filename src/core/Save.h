@@ -21,6 +21,8 @@ struct SaveData {
     bool fxOn = true;
     bool autoCheck = true;   // PauseLayer::onAutoCheck: practice mode drops checkpoints on its own
 
+    std::string editorLevel;      // the level being built in the editor (serialized level string)
+
     // Earned achievements (ids like "geometry.ach.level01a"); they unlock icons and colours (AchievementsDesc.plist).
     std::vector<std::string> achievements;
     bool hasAchievement(const std::string& id) const {

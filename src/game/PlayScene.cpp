@@ -36,7 +36,7 @@ constexpr float kFloorPx = 90.f * kPx;    // y of the floor line (camera at rest
 // End of the level: a wall stands 100 units past the last object. From 200 units before the end the icon is drawn pulled
 // towards the wall's centre; when the sim finishes it is sucked in over kEndTime seconds before the results board opens.
 // (The wall artwork and exact pull curve are approximations; the converging particles are endEffectPortal.plist.)
-constexpr float kEndApproach = 200.f, kEndTime = 0.7f;
+constexpr float kEndApproach = 500.f, kEndTime = 0.7f;
 constexpr float kBoardDelay = 2.0f;                 // seconds of "LEVEL COMPLETE!" before the results board opens
 constexpr float kPlayerScreenX = (568.889f / 2.f - 75.f) * kPx;   // PlayLayer::updateCamera: x = player - W/2 + 75
 constexpr float kPlanePx = kFloorPx + 300.f * kPx;
@@ -72,16 +72,18 @@ struct Particle {
 
 class PlayScene : public Scene {
 public:
-    explicit PlayScene(int index)
-        : index_(index),
+    // customText != nullptr: play-test of an editor level (nothing is recorded, leaving returns to `back`)
+    explicit PlayScene(int index, const std::string* customText = nullptr,
+                       std::function<std::unique_ptr<Scene>()> back = nullptr)
+        : index_(index), custom_(customText != nullptr), customBack_(std::move(back)),
           back_("GJ_arrow_01_001.png", 50.f, kH - 50.f, 1.f, [this] { leave(); }),
-          pauseBtn_("GJ_pauseBtn_001.png", kW - 50.f, kH - 50.f, 1.f, [this] { openPause(); }),
+          pauseBtn_("GJ_pauseBtn_clean_001.png", kW - 31.f, kH - 33.f, 1.05f, [this] { openPause(); }),     // small, dark, see-through (measured)
           checkBtn_("GJ_checkpointBtn_001.png", 575.f, 72.f, 1.f, [this] { addCheckpoint(); }),
           removeBtn_("GJ_removeCheckBtn_001.png", 727.f, 72.f, 1.f, [this] { removeCheckpoint(); }),
           replay_("GJ_replayBtn_001.png", 425.f, 90.f, 1.f, [this] { restart(); }),
           menu_("GJ_menuBtn_001.png", 856.f, 90.f, 1.f, [this] { leave(); }) {
         std::string txt;
-        if (E().readText(levelFile(index_), txt)) {
+        if (custom_ ? (txt = *customText, true) : E().readText(levelFile(index_), txt)) {
             LevelParseResult r = parseLevelString(txt);
             if (r.ok) {
                 if (r.warningCount) SDL_Log("level %d: %zu parse warnings", index_, r.warningCount);
@@ -173,6 +175,7 @@ public:
         }
         E().setZoom(kZoom);
         drawBackground(camX_ * 0.1f, bg_.now, camY_);
+        drawEndWall();
         drawGround(camX_, ground_.now, camY_, kFloorPx);
         const auto& p = sim_->player();
         // PlayLayer::updateCamera: _ceiling->setVisible(gamemode != cube). It is only a visual of the ship corridor.
@@ -180,7 +183,6 @@ public:
 
         collectVisible();
         drawObjects(true);
-        drawEndWall();
         drawFxBehind();
         if (state_ != State::Dead && state_ != State::Complete) drawPlayer();
         drawObjects(false);
@@ -197,8 +199,9 @@ public:
         E().setZoom(1.f);                                 // HUD and menus are not part of the world
         if (!pause_) drawHud();
         if (state_ == State::Playing && !pause_) {
+            pauseBtn_.alpha = 110;                          // see-through like in the real game
             pauseBtn_.draw();
-            if (practice_) { checkBtn_.draw(); removeBtn_.draw(); }
+            if (practice_) { checkBtn_.alpha = removeBtn_.alpha = 170; checkBtn_.draw(); removeBtn_.draw(); }
         }
 
         if (pause_) pause_->draw();
@@ -280,7 +283,7 @@ private:
 
     void startMusic(float atSeconds = 0.f) {
         if (!E().audioOk) return;
-        E().playMusic(levelMeta(index_).track, 0);
+        E().playMusic(levelMeta(custom_ ? std::max(0, std::min(kLevelCount - 1, level_.settings.musicTrack)) : index_).track, 0);
         if (atSeconds > 0.f) E().setMusicPosition(atSeconds);
     }
 
@@ -373,8 +376,9 @@ private:
             closePause();
             restartFresh();
         };
-        pause_ = std::make_unique<PauseLayer>(levelMeta(index_).name, E().save.bestOf(index_),
-                                              E().save.practiceBestOf(index_), practice_, std::move(cb));
+        pause_ = std::make_unique<PauseLayer>(custom_ ? std::string("Editor Test") : std::string(levelMeta(index_).name),
+                                              custom_ ? 0 : E().save.bestOf(index_), custom_ ? 0 : E().save.practiceBestOf(index_),
+                                              practice_, std::move(cb));
     }
     void closePause() {
         if (!pause_) return;
@@ -389,10 +393,10 @@ private:
     }
 
     // Stats board counters (not counted for debug starts)
-    void countAttempt() { if (g_debugStartX == 0.0) { ++E().save.totalAttempts; checkProgressAchievements(); } }
+    void countAttempt() { if ((g_debugStartX == 0.0 && !custom_)) { ++E().save.totalAttempts; checkProgressAchievements(); } }
     void countJumps() {
         const long long j = sim_->jumpCount();
-        if (g_debugStartX == 0.0 && j > lastJumps_) { E().save.totalJumps += j - lastJumps_; checkProgressAchievements(); }
+        if ((g_debugStartX == 0.0 && !custom_) && j > lastJumps_) { E().save.totalJumps += j - lastJumps_; checkProgressAchievements(); }
         sessionJumps_ += j - lastJumps_;
         lastJumps_ = j;
     }
@@ -402,6 +406,7 @@ private:
         leaving_ = true;
         E().stopMusic();
         E().persist();
+        if (custom_ && customBack_) { auto b = customBack_; app().goTo(b); return; }
         const int page = index_;
         app().goTo([page] { return makeLevelSelectScene(page); });
     }
@@ -475,7 +480,7 @@ private:
         E().stopMusic();
         E().playSfx("explode_11.ogg");
         const int pct = (int)(sim_->progress() * 100.0);
-        if (g_debugStartX == 0.0) {
+        if ((g_debugStartX == 0.0 && !custom_)) {
             if (practice_) E().save.recordPracticeBest(index_, pct);
             else E().save.recordBest(index_, pct);
             E().persist();
@@ -516,15 +521,22 @@ private:
             const float t = (float)(i + 1) / n;
             E().fillRect(x - gw + i * (gw / n), 0.f, gw / n + 0.6f, 640.f, {255, 244, 170}, (Uint8)(235.f * t * t));
         }
-        E().fillRect(x - 2.f, 0.f, 4.f, 640.f, {255, 255, 255}, 255);
-        // the wall is built from the same dark outlined blocks as the level and takes the level's colour
+        // The wall is built from the same blocks as the level (30 units = 60 px, one block thick per column), tinted with the
+        // level's colour so the outlines turn into its glow colour. It is drawn before the ground, so the black floor strip
+        // runs across it.
         const Color bc = bg_.now;
-        const Color dark{(Uint8)(bc.r * 0.13f), (Uint8)(bc.g * 0.13f), (Uint8)(bc.b * 0.13f)};
-        const Color line{(Uint8)std::min(255.f, bc.r * 1.15f + 20.f), (Uint8)std::min(255.f, bc.g * 1.15f + 20.f), (Uint8)std::min(255.f, bc.b * 1.15f + 20.f)};
-        const float pw = std::max(0.f, kWorldW - x);
-        E().fillRect(x + 2.f, 0.f, pw + 40.f, 640.f, dark, 255);
-        for (float gx = x + 8.f; gx < kWorldW + 20.f; gx += 16.f) E().fillRect(gx, 0.f, 1.5f, 640.f, line, 170);
-        for (float gy = 4.f; gy < 640.f; gy += 16.f) E().fillRect(x + 2.f, gy, pw + 40.f, 1.5f, line, 170);
+        const Color tint{(Uint8)std::min(255.f, bc.r * 1.1f + 45.f), (Uint8)std::min(255.f, bc.g * 1.1f + 45.f), (Uint8)std::min(255.f, bc.b * 1.1f + 45.f)};
+        Sprite blk = E().sprite("square_01_001.png");
+        const float bs = 30.f * kPx;
+        const int cols = std::max(1, std::min(4, (int)std::ceil((kWorldW - x) / bs) + 1));
+        for (int c = 0; c < cols; ++c)
+            for (int r = -3;; ++r) {
+                const float by = kFloorPx + (15.f + 30.f * r) * kPx - camY_;
+                if (by - bs / 2 > 640.f) break;
+                if (by + bs / 2 < 0.f) continue;
+                E().drawSprite(blk, x + bs / 2 + c * bs, by, 1.f, 1.f, 0, tint);
+            }
+        E().fillRect(x - 1.5f, 0.f, 3.f, 640.f, {255, 255, 255}, 255);               // bright edge
     }
 
     void onComplete() {
@@ -534,7 +546,7 @@ private:
         E().playSfx("endStart_02.ogg");
         fireworks_ = 0.f;
         fx_.add("levelComplete01.plist", wallX(), wallY());
-        if (g_debugStartX == 0.0) {
+        if ((g_debugStartX == 0.0 && !custom_)) {
             if (practice_) E().save.recordPracticeBest(index_, 100);
             else E().save.recordBest(index_, 100);
             // PlayLayer::levelComplete -> achievements: practice -> level0Na (a colour), normal -> level0Nb (an icon)
@@ -810,6 +822,8 @@ private:
     }
 
     int index_;
+    bool custom_ = false;
+    std::function<std::unique_ptr<Scene>()> customBack_;
     Level level_;
     std::unique_ptr<Simulation> sim_;
     Button back_, pauseBtn_, checkBtn_, removeBtn_, replay_, menu_;
@@ -842,5 +856,8 @@ private:
 } // namespace
 
 std::unique_ptr<Scene> makePlayScene(int level) { return std::make_unique<PlayScene>(level); }
+std::unique_ptr<Scene> makePlayTestScene(const std::string& levelText, std::function<std::unique_ptr<Scene>()> back) {
+    return std::make_unique<PlayScene>(0, &levelText, std::move(back));
+}
 
 } // namespace ogd

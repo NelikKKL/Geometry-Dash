@@ -63,6 +63,7 @@ struct Level {
     std::vector<LevelObject> objects;  // stable-sorted by x (file order kept for equal x)
 
     bool empty() const { return objects.empty(); }
+    void sortByX();                      // keep `objects` ordered by x after edits (range() relies on it)
     float maxX() const { return objects.empty() ? 0.f : objects.back().x; }
     // Index range [first, last) of objects with x0 <= x <= x1 (binary search).
     std::pair<size_t, size_t> range(float x0, float x1) const;
@@ -76,6 +77,9 @@ struct LevelParseResult {
     size_t warningCount = 0;              // total, including those not stored
     size_t skippedObjects = 0;
 };
+
+// Level text as the game stores it: "kS1,..;1,id,2,x,3,y[,4,1][,5,1][,6,rot][,extra...];..." (always plain text).
+std::string serializeLevel(const Level& level);
 
 // Parses already-decoded level text. Lenient: malformed objects are skipped with a warning.
 LevelParseResult parseLevel(const std::string& text);

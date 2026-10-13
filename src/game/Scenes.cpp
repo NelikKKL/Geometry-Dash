@@ -88,7 +88,7 @@ public:
             std::function<void()> cb;
             if (i == 1) cb = [] { E().playSfx("playSound_01.ogg"); app().goTo([] { return makeLevelSelectScene(0); }); };
             else if (i == 0) cb = [] { E().playSfx("playSound_01.ogg"); app().goTo([] { return makeGarageScene(); }); };
-            else cb = [this] { alert("Creator", "The level editor is not implemented yet."); };
+            else cb = [] { E().playSfx("playSound_01.ogg"); app().goTo([] { return makeEditorScene(); }); };
             buttons_.emplace_back(names[i], p.first, p.second, 0.9f * 1.13f, cb);
         }
         auto c1 = toScreen(lx[0] - 70, -70), c2 = toScreen(lx[2] + 50, -50);

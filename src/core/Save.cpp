@@ -37,6 +37,7 @@ bool SaveData::load(const std::string& path) {
         musicOn = j.value("opt-music", true);
         fxOn = j.value("opt-fx", true);
         autoCheck = j.value("opt-autocheck", true);
+        editorLevel = j.value("editor-level", std::string());
         achievements.clear();
         if (j.contains("achievements") && j["achievements"].is_array())
             for (auto& v : j["achievements"]) if (v.is_string()) achievements.push_back(v.get<std::string>());
@@ -75,6 +76,7 @@ bool SaveData::save(const std::string& path) const {
         {"opt-fx", fxOn},
         {"opt-autocheck", autoCheck},
         {"achievements", achievements},
+        {"editor-level", editorLevel},
         {"stat-jumps", totalJumps},
         {"stat-attempts", totalAttempts},
     };

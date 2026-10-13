@@ -21,6 +21,7 @@ public:
     float x, y;
     bool flipX = false;
     Color tint;
+    Uint8 alpha = 255;               // e.g. the in-game pause and checkpoint buttons are see-through
 
 private:
     bool hit(float px, float py) const;

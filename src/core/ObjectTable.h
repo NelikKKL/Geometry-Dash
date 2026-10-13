@@ -8,6 +8,7 @@
 //   * portals 10 (gravity down) 11 (gravity up) 12 (cube) 13 (ship), pad 35, ring 36, colour triggers 29/30
 //   * 22-28, 32, 33 are invisible fade/trail triggers: ignored
 #pragma once
+#include <vector>
 #include <cstdint>
 
 namespace ogd {
@@ -40,5 +41,8 @@ struct ObjInfo {
 
 // nullptr for ids that are not in the table at all.
 const ObjInfo* objectInfo(int id);
+
+// Every object the engine knows, in table order (the editor's Build palette); entries without a sprite are skipped.
+const std::vector<const ObjInfo*>& allObjects();
 
 } // namespace ogd

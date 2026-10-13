@@ -59,4 +59,12 @@ const ObjInfo* objectInfo(int id) {
     return (id >= 0 && id < 64) ? index[id] : nullptr;
 }
 
+const std::vector<const ObjInfo*>& allObjects() {
+    static std::vector<const ObjInfo*> all;
+    if (all.empty())
+        for (const ObjInfo& o : kTable)
+            if (o.sprite) all.push_back(&o);
+    return all;
+}
+
 } // namespace ogd

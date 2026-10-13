@@ -331,6 +331,24 @@ static void testUnlocks() {
     // achievements survive a save round trip
     const std::string ap = std::string(OGD_TEST_DATA) + "/../ach_tmp.json";
     CHECK(s.save(ap)); SaveData s2; CHECK(s2.load(ap) && s2.hasAchievement("geometry.ach.level01b") && s2.hasAchievement("geometry.ach.level01a")); std::remove(ap.c_str());
+    // level serialization (editor): parse -> serialize -> parse gives the same objects
+    {
+        const std::string src = "kS1,40,kS2,62,kA1,2;1,1,2,45,3,15;1,8,2,75.5,3,15,6,90,4,1;1,36,2,200,3,150,5,1,20,7;";
+        LevelParseResult a = parseLevel(src);
+        CHECK(a.ok && a.level.objects.size() == 3);
+        const std::string out = serializeLevel(a.level);
+        LevelParseResult b = parseLevel(out);
+        CHECK(b.ok && b.level.objects.size() == 3);
+        CHECK(b.level.settings.raw.at("kA1") == "2" && b.level.settings.raw.at("kS1") == "40");
+        bool same = true;
+        for (size_t i = 0; i < 3; ++i) {
+            const auto& x = a.level.objects[i]; const auto& y = b.level.objects[i];
+            same = same && x.id == y.id && x.x == y.x && x.y == y.y && x.flipX == y.flipX && x.flipY == y.flipY && x.rotation == y.rotation && x.extra == y.extra;
+        }
+        CHECK(same);
+        Level l = b.level; l.objects.push_back(LevelObject{}); l.objects.back().id = 1; l.objects.back().x = 10; l.sortByX();
+        CHECK(l.objects.front().x == 10 && l.objects.size() == 4);
+    }
     SaveData d; d.debugUnlockAll = true; CHECK(isUnlocked(iconUnlockRule(13), d, 7));
     // palette wraps and matches the colours seen in the original garage
     CHECK(paletteRgb(0).r == 125 && paletteRgb(0).g == 255 && paletteRgb(3).b == 255 && paletteRgb(12).r == 125 && paletteRgb(-1).g == 255);
