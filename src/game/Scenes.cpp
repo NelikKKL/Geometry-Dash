@@ -74,44 +74,37 @@ public:
         }
         respawn();
 
-        // main row: garage / play / creator. Replicates cocos layout: Menu(scale 1.13 @ centre+(82,47)) >
-        // inner menu(scale 0.9 @ (-70,0)) > items aligned horizontally with padding 50.
-        const char* names[3] = {"GJ_garageBtn_001.png", "GJ_playBtn_001.png", "GJ_creatorBtn_001.png"};
-        float widths[3], total = 50.f * 2;
-        for (int i = 0; i < 3; ++i) total += (widths[i] = E().sprite(names[i]).srcW);
-        float cursor = -total / 2, lx[3];
-        for (int i = 0; i < 3; ++i) { lx[i] = cursor + widths[i] / 2; cursor += widths[i] + 50; }
-        auto toScreen = [](float mx, float my) { return std::pair<float, float>(kW / 2.f + 82 + 1.13f * mx, kH / 2.f + 47 + 1.13f * my); };
+        // Layout measured on the real 1.0 main menu (Android screenshot, 1.86:1 viewport mapped onto 1280x720):
+        // garage / play / creator sit on one row left-centre-right of the screen centre, the bottom row of three
+        // round buttons is centred, RobTop's logo and "More games" hug the screen edges.
+        struct Item { const char* spr; float x, y; std::function<void()> cb; };
+        const Item mainRow[3] = {
+            {"GJ_garageBtn_001.png", 403.f, 382.f, [] {
+                 E().save.visitedGarage = true; E().persist();
+                 E().playSfx("playSound_01.ogg"); app().goTo([] { return makeGarageScene(); }); }},
+            {"GJ_playBtn_001.png", 641.f, 383.f, [] {
+                 E().playSfx("playSound_01.ogg"); app().goTo([] { return makeLevelSelectScene(0); }); }},
+            {"GJ_creatorBtn_001.png", 877.f, 382.f, [] {
+                 E().save.visitedCreator = true; E().persist();
+                 E().playSfx("playSound_01.ogg"); app().goTo([] { return makeCreatorScene(); }); }},
+        };
+        for (const Item& it : mainRow) buttons_.emplace_back(it.spr, it.x, it.y, 0.9f * 1.13f, it.cb);
+        // first-run hints; each one disappears once its button has been used
+        if (!E().save.visitedGarage) deco_.push_back({"GJ_chrSel_001.png", 296.f, 272.f, 1.13f});
+        if (!E().save.visitedCreator) deco_.push_back({"GJ_lvlEdit_001.png", 987.f, 272.f, 1.13f});
 
-        for (int i = 0; i < 3; ++i) {
-            auto p = toScreen(-70 + 0.9f * lx[i], 0);
-            std::function<void()> cb;
-            if (i == 1) cb = [] { E().playSfx("playSound_01.ogg"); app().goTo([] { return makeLevelSelectScene(0); }); };
-            else if (i == 0) cb = [] { E().playSfx("playSound_01.ogg"); app().goTo([] { return makeGarageScene(); }); };
-            else cb = [] { E().playSfx("playSound_01.ogg"); app().goTo([] { return makeEditorScene(); }); };
-            buttons_.emplace_back(names[i], p.first, p.second, 0.9f * 1.13f, cb);
-        }
-        auto c1 = toScreen(lx[0] - 70, -70), c2 = toScreen(lx[2] + 50, -50);
-        deco_.push_back({"GJ_chrSel_001.png", c1.first, c1.second, 1.13f});
-        deco_.push_back({"GJ_lvlEdit_001.png", c2.first, c2.second, 1.13f});
-
-        // bottom row
+        // bottom row: achievements / options / stats
         const char* bn[3] = {"GJ_achBtn_001.png", "GJ_optionsBtn_001.png", "GJ_statsBtn_001.png"};
-        const char* bt[3] = {"Achievements", "Options", "Stats"};
-        float bw[3], btotal = 10.f * 2;
-        for (int i = 0; i < 3; ++i) btotal += (bw[i] = E().sprite(bn[i]).srcW);
-        float bc = kW / 2.f - 30 - btotal / 2;
+        const float bx[3] = {519.f, 640.f, 761.f};
         for (int i = 0; i < 3; ++i) {
-            std::string t = bt[i];
-            std::function<void()> cb = [this, t] { alert(t, "Not implemented yet."); };
-            if (i == 0) cb = [this] { board_ = makeAchievementsBoard(); };         // Achievements
-            else if (i == 2) cb = [this] { board_ = makeStatsBoard(); };
+            std::function<void()> cb;
+            if (i == 0) cb = [this] { board_ = makeAchievementsBoard(); };
             else if (i == 1) cb = [this] { board_ = makeOptionsBoard(); };
-            buttons_.emplace_back(bn[i], bc + bw[i] / 2, 100.f, 1.f, cb);
-            bc += bw[i] + 10;
+            else cb = [this] { board_ = makeStatsBoard(); };
+            buttons_.emplace_back(bn[i], bx[i], 101.f, 1.f, cb);
         }
-        buttons_.emplace_back("robtoplogo_small.png", 170.f, 90.f, 0.8f * 1.13f, [] { SDL_OpenURL("http://www.robtopgames.com"); });
-        buttons_.emplace_back("GJ_moreGamesBtn_001.png", kW - 156.f, 130.f, 0.9f * 1.13f, [this] { board_ = makeMoreGamesBoard(); notifier().earn("geometry.ach.moreGames"); });
+        buttons_.emplace_back("robtoplogo_small.png", 127.f, 67.f, 0.8f * 1.13f, [] { SDL_OpenURL("http://www.robtopgames.com"); });
+        buttons_.emplace_back("GJ_moreGamesBtn_001.png", 1188.f, 100.f, 0.9f * 1.13f, [this] { board_ = makeMoreGamesBoard(); notifier().earn("geometry.ach.moreGames"); });
     }
 
     void update(float dt) override {

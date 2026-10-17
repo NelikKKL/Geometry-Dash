@@ -21,7 +21,21 @@ struct SaveData {
     bool fxOn = true;
     bool autoCheck = true;   // PauseLayer::onAutoCheck: practice mode drops checkpoints on its own
 
-    std::string editorLevel;      // the level being built in the editor (serialized level string)
+    std::string editorLevel;      // legacy single editor level (migrated into customLevels on load)
+
+    // "My Levels" (CreatorLayer > Create): the player's own levels. GJGameLevel in the original.
+    struct CustomLevel {
+        std::string name, desc;
+        std::string data;         // serialized level string (see core/Level.h)
+        int song = 0;             // official track id (kA1), 0 = Stereo Madness
+        int version = 1;
+    };
+    std::vector<CustomLevel> customLevels;
+    int editingLevel = -1;        // index in customLevels of the level open in EditLevelLayer / the editor (not saved)
+
+    // First-run hints on the main menu ("Character Select", "Level Editor") disappear after the first visit.
+    bool visitedGarage = false;
+    bool visitedCreator = false;
 
     // Earned achievements (ids like "geometry.ach.level01a"); they unlock icons and colours (AchievementsDesc.plist).
     std::vector<std::string> achievements;

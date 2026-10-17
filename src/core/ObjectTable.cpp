@@ -42,7 +42,7 @@ const ObjInfo kTable[] = {
     {22, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0}, {23, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0},
     {24, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0}, {25, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0},
     {26, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0}, {27, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0},
-    {28, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0}, {32, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0},
+    {28, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0}, {31, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0}, {32, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0},
     {33, ObjKind::Ignored, nullptr, nullptr, 0, false, 0, 0, 0, 0},
 };
 

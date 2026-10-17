@@ -49,6 +49,7 @@ public:
     void onUp(float px, float py, float dy = 0.f);
     std::string text;
     float x, y, w, h;
+    std::string plate = "GJ_button_01.png";   // other GJ_button_NN.png frames change the colour
 
 private:
     bool hit(float px, float py, float dy) const;

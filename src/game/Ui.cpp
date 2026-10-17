@@ -96,7 +96,7 @@ void LabelButton::onUp(float px, float py, float dy) {
 }
 
 void LabelButton::draw(float dy) const {
-    E().drawPanel(E().sprite("GJ_button_01.png"), x, y + dy, w * cur_, h * cur_);
+    E().drawPanel(E().sprite(plate), x, y + dy, w * cur_, h * cur_);
     Font* f = E().font(font_);
     E().drawText(f, text, x, y + dy + textDy_, fitScale(f, text, w * 0.9f, textScale_) * cur_);
 }

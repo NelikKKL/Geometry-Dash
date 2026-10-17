@@ -38,6 +38,27 @@ bool SaveData::load(const std::string& path) {
         fxOn = j.value("opt-fx", true);
         autoCheck = j.value("opt-autocheck", true);
         editorLevel = j.value("editor-level", std::string());
+        visitedGarage = j.value("visited-garage", false);
+        visitedCreator = j.value("visited-creator", false);
+        customLevels.clear();
+        if (j.contains("custom-levels") && j["custom-levels"].is_array())
+            for (auto& v : j["custom-levels"]) {
+                if (!v.is_object()) continue;
+                CustomLevel c;
+                c.name = v.value("name", std::string());
+                c.desc = v.value("desc", std::string());
+                c.data = v.value("data", std::string());
+                c.song = v.value("song", 0);
+                c.version = std::max(1, v.value("version", 1));
+                customLevels.push_back(std::move(c));
+            }
+        if (customLevels.empty() && !editorLevel.empty()) {      // older saves had one anonymous editor level
+            CustomLevel c;
+            c.name = "My Level";
+            c.data = editorLevel;
+            customLevels.push_back(std::move(c));
+        }
+        editorLevel.clear();
         achievements.clear();
         if (j.contains("achievements") && j["achievements"].is_array())
             for (auto& v : j["achievements"]) if (v.is_string()) achievements.push_back(v.get<std::string>());
@@ -76,10 +97,14 @@ bool SaveData::save(const std::string& path) const {
         {"opt-fx", fxOn},
         {"opt-autocheck", autoCheck},
         {"achievements", achievements},
-        {"editor-level", editorLevel},
+        {"visited-garage", visitedGarage},
+        {"visited-creator", visitedCreator},
         {"stat-jumps", totalJumps},
         {"stat-attempts", totalAttempts},
     };
+    j["custom-levels"] = nlohmann::json::array();
+    for (const CustomLevel& c : customLevels)
+        j["custom-levels"].push_back({{"name", c.name}, {"desc", c.desc}, {"data", c.data}, {"song", c.song}, {"version", c.version}});
     std::ofstream f(path);
     if (!f) return false;
     f << j.dump(2);
